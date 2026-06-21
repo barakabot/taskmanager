@@ -27,7 +27,7 @@ export async function GET() {
 
   const allTasks = await db.task.findMany({
     where: { status: { not: "DONE" } },
-    include: { assignee: true },
+    include: { assignee: true, subDepartment: true },
     orderBy: { deadline: "asc" },
   });
 

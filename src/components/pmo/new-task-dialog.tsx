@@ -49,6 +49,7 @@ export function NewTaskDialog({ open, onOpenChange, onCreated }: Props) {
   const [title, setTitle] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [department, setDepartment] = React.useState<DepartmentKey | null>(null);
+  const [subDepartmentId, setSubDepartmentId] = React.useState<string | null>(null);
   const [assigneeId, setAssigneeId] = React.useState<string | null>(null);
   const [priority, setPriority] = React.useState<PriorityKey | null>(null);
   const [link, setLink] = React.useState("");
@@ -66,6 +67,20 @@ export function NewTaskDialog({ open, onOpenChange, onCreated }: Props) {
     },
   });
 
+  // Sub-departments for the selected department
+  const { data: subDeptsData } = useQuery({
+    queryKey: ["sub-departments", department],
+    queryFn: async () => {
+      if (!department) return { subDepartments: [] };
+      const r = await fetch(`/api/sub-departments?department=${department}`);
+      return (await r.json()) as {
+        subDepartments: { id: string; name: string; department: string }[];
+      };
+    },
+    enabled: !!department,
+  });
+  const subDepts = subDeptsData?.subDepartments ?? [];
+
   // Reset on close
   React.useEffect(() => {
     if (!open) {
@@ -74,6 +89,7 @@ export function NewTaskDialog({ open, onOpenChange, onCreated }: Props) {
         setTitle("");
         setDescription("");
         setDepartment(null);
+        setSubDepartmentId(null);
         setAssigneeId(null);
         setPriority(null);
         setLink("");
@@ -141,6 +157,7 @@ export function NewTaskDialog({ open, onOpenChange, onCreated }: Props) {
           title: title.trim(),
           description: description.trim() || undefined,
           department,
+          subDepartmentId: subDepartmentId || undefined,
           assigneeId,
           priority,
           deadline: d.toISOString(),
@@ -270,30 +287,69 @@ export function NewTaskDialog({ open, onOpenChange, onCreated }: Props) {
             )}
 
             {STEPS[step].key === "department" && (
-              <div className="space-y-2">
-                <Label>بخش مربوطه را انتخاب کنید *</Label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {DEPARTMENTS.map((d) => (
-                    <button
-                      key={d.key}
-                      onClick={() => {
-                        setDepartment(d.key);
-                        setAssigneeId(null);
-                      }}
-                      className={cn(
-                        "flex items-center gap-2 rounded-lg border p-3 text-right text-sm transition-all",
-                        department === d.key
-                          ? "ring-2 ring-primary border-primary"
-                          : "hover:border-primary/40 hover:bg-muted/50",
-                        deptClasses[d.color]
-                      )}
-                    >
-                      <span className={cn("h-2.5 w-2.5 rounded-full", deptDot[d.color])} />
-                      <span className="flex-1 font-medium">{d.label}</span>
-                      {department === d.key && <Check className="h-4 w-4" />}
-                    </button>
-                  ))}
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label>بخش مربوطه را انتخاب کنید *</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {DEPARTMENTS.map((d) => (
+                      <button
+                        key={d.key}
+                        onClick={() => {
+                          setDepartment(d.key);
+                          setSubDepartmentId(null);
+                          setAssigneeId(null);
+                        }}
+                        className={cn(
+                          "flex items-center gap-2 rounded-lg border p-3 text-right text-sm transition-all",
+                          department === d.key
+                            ? "ring-2 ring-primary border-primary"
+                            : "hover:border-primary/40 hover:bg-muted/50",
+                          deptClasses[d.color]
+                        )}
+                      >
+                        <span className={cn("h-2.5 w-2.5 rounded-full", deptDot[d.color])} />
+                        <span className="flex-1 font-medium">{d.label}</span>
+                        {department === d.key && <Check className="h-4 w-4" />}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+
+                {/* Sub-department picker (optional, appears when department has sub-units) */}
+                {department && subDepts.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t">
+                    <Label className="text-xs text-muted-foreground">
+                      زیرمجموعه (اختیاری)
+                    </Label>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        onClick={() => setSubDepartmentId(null)}
+                        className={cn(
+                          "rounded-md border px-2.5 py-1 text-xs transition-all",
+                          !subDepartmentId
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "hover:bg-muted"
+                        )}
+                      >
+                        بدون زیرمجموعه
+                      </button>
+                      {subDepts.map((s) => (
+                        <button
+                          key={s.id}
+                          onClick={() => setSubDepartmentId(s.id)}
+                          className={cn(
+                            "rounded-md border px-2.5 py-1 text-xs transition-all",
+                            subDepartmentId === s.id
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "hover:bg-muted"
+                          )}
+                        >
+                          {s.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

@@ -24,6 +24,7 @@ import type { SerializedMember } from "@/lib/serialize";
 import { toast } from "sonner";
 import { UserPlus, Save, KeyRound } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
 
 interface Props {
   open: boolean;
@@ -37,8 +38,21 @@ export function MemberDialog({ open, onOpenChange, onSaved, editing }: Props) {
   const [handle, setHandle] = React.useState("");
   const [password, setPassword] = React.useState("1234");
   const [department, setDepartment] = React.useState<string>("FANTASY");
+  const [subDepartmentId, setSubDepartmentId] = React.useState<string>("");
   const [role, setRole] = React.useState<string>("MEMBER");
   const [busy, setBusy] = React.useState(false);
+
+  const { data: subDeptsData } = useQuery({
+    queryKey: ["sub-departments", department, open],
+    queryFn: async () => {
+      const r = await fetch(`/api/sub-departments?department=${department}`);
+      return (await r.json()) as {
+        subDepartments: { id: string; name: string }[];
+      };
+    },
+    enabled: open,
+  });
+  const subDepts = subDeptsData?.subDepartments ?? [];
 
   React.useEffect(() => {
     if (open) {
@@ -46,9 +60,20 @@ export function MemberDialog({ open, onOpenChange, onSaved, editing }: Props) {
       setHandle(editing?.handle ?? "");
       setPassword(editing?.password ?? "1234");
       setDepartment(editing?.department ?? "FANTASY");
+      setSubDepartmentId(editing?.subDepartmentId ?? "");
       setRole(editing?.role ?? "MEMBER");
     }
   }, [open, editing]);
+
+  // Clear sub-department when department changes (and it doesn't match)
+  React.useEffect(() => {
+    if (!open) return;
+    setSubDepartmentId((cur) => {
+      if (!cur) return cur;
+      const stillValid = subDepts.some((s) => s.id === cur);
+      return stillValid ? cur : "";
+    });
+  }, [department, subDepts, open]);
 
   async function save() {
     if (!name.trim() || !handle.trim() || !department) {
@@ -68,6 +93,7 @@ export function MemberDialog({ open, onOpenChange, onSaved, editing }: Props) {
           handle: handle.trim(),
           password: password.trim() || "1234",
           department,
+          subDepartmentId: subDepartmentId || null,
           role,
         }),
       });
@@ -176,6 +202,24 @@ export function MemberDialog({ open, onOpenChange, onSaved, editing }: Props) {
               </Select>
             </div>
           </div>
+          {subDepts.length > 0 && (
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">زیرمجموعه (اختیاری)</Label>
+              <Select value={subDepartmentId} onValueChange={setSubDepartmentId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="بدون زیرمجموعه" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">بدون زیرمجموعه</SelectItem>
+                  {subDepts.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           {role === "MANAGER" && (
             <div className="rounded-md border border-primary/30 bg-primary/5 p-2 text-xs text-primary">
               مدیران به همه تسک‌ها، گزارش‌ها و پنل مدیریت دسترسی دارند.

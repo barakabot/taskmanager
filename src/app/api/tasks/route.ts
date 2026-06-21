@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
 
   const tasks = await db.task.findMany({
     where,
-    include: { assignee: true },
+    include: { assignee: true, subDepartment: true },
     orderBy: { deadline: "asc" },
   });
 
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { title, department, assigneeId, priority, deadline, startTime, link, description } = body ?? {};
+  const { title, department, assigneeId, priority, deadline, startTime, link, description, subDepartmentId } = body ?? {};
 
   if (!title || !department || !assigneeId || !priority || !deadline) {
     return NextResponse.json(
@@ -75,6 +75,19 @@ export async function POST(req: NextRequest) {
   const assignee = await db.member.findUnique({ where: { id: assigneeId } });
   if (!assignee) {
     return NextResponse.json({ error: "مسئول یافت نشد." }, { status: 400 });
+  }
+
+  // Validate sub-department belongs to the chosen department (if provided)
+  let validSubId: string | null = null;
+  if (subDepartmentId) {
+    const sub = await db.subDepartment.findUnique({ where: { id: subDepartmentId } });
+    if (!sub || sub.department !== department) {
+      return NextResponse.json(
+        { error: "زیرمجموعه انتخاب‌شده متعلق به این بخش نیست." },
+        { status: 400 }
+      );
+    }
+    validSubId = sub.id;
   }
 
   // Validate that start time (if provided) is before the deadline.
@@ -97,6 +110,7 @@ export async function POST(req: NextRequest) {
       title: String(title).trim(),
       description: description ?? null,
       department,
+      subDepartmentId: validSubId,
       assigneeId,
       priority,
       deadline: deadlineDate,
@@ -104,7 +118,7 @@ export async function POST(req: NextRequest) {
       link: link ?? null,
       status: "PENDING",
     },
-    include: { assignee: true },
+    include: { assignee: true, subDepartment: true },
   });
 
   await db.followUpLog.create({

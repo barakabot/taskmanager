@@ -23,7 +23,7 @@ export async function GET() {
     );
   }
 
-  const tasks = await db.task.findMany({ include: { assignee: true } });
+  const tasks = await db.task.findMany({ include: { assignee: true, subDepartment: true } });
   const now = new Date();
   const nowMs = now.getTime();
 

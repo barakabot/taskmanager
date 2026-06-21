@@ -35,6 +35,7 @@ import {
   ResetPasswordDialog,
   DeleteMemberDialog,
 } from "./member-dialog";
+import { SubDepartmentsManager } from "./sub-departments-manager";
 import type { SerializedMember } from "@/lib/serialize";
 import { DEPARTMENTS } from "@/lib/constants";
 import { toPersianDigits, formatJalaliDate, formatTime } from "@/lib/jalali";
@@ -111,6 +112,8 @@ export function AdminPanelView() {
 
   return (
     <div className="h-full flex flex-col gap-3">
+      <ScrollArea className="flex-1 scroll-area-pmo">
+        <div className="space-y-3 pb-4">
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard label="کل اعضا" value={stats.total} icon={<Users className="h-4 w-4" />} tone="slate" />
@@ -150,7 +153,7 @@ export function AdminPanelView() {
       </div>
 
       {/* Members table */}
-      <div className="flex-1 rounded-lg border overflow-hidden">
+      <div className="rounded-lg border overflow-hidden max-h-[420px]">
         <ScrollArea className="h-full scroll-area-pmo">
           <Table>
             <TableHeader>
@@ -291,6 +294,11 @@ export function AdminPanelView() {
         member={deleteTarget}
         onDone={refresh}
       />
+        </div>
+      </ScrollArea>
+
+      {/* Sub-departments management */}
+      <SubDepartmentsManager />
     </div>
   );
 }

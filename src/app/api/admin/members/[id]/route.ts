@@ -17,7 +17,7 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await req.json();
-  const { name, handle, password, department, role, action } = body ?? {};
+  const { name, handle, password, department, role, subDepartmentId, action } = body ?? {};
 
   const existing = await db.member.findUnique({ where: { id } });
   if (!existing) {
@@ -30,7 +30,7 @@ export async function PATCH(
     const updated = await db.member.update({
       where: { id },
       data: { password: newPwd },
-      include: { _count: { select: { tasks: true } } },
+      include: { _count: { select: { tasks: true } }, subDepartment: true },
     });
     return NextResponse.json({
       member: serializeMember(updated, 0, true),
@@ -53,13 +53,37 @@ export async function PATCH(
     }
   }
   if (password) data.password = String(password).trim();
-  if (department && DEPARTMENTS.some((d) => d.key === department)) data.department = department;
+  const newDept = department && DEPARTMENTS.some((d) => d.key === department) ? department : null;
+  if (newDept) {
+    data.department = newDept;
+    // If department changes, clear the old sub-department (it belongs to the old dept)
+    if (newDept !== existing.department) {
+      data.subDepartmentId = null;
+    }
+  }
   if (role && (role === "MANAGER" || role === "MEMBER")) data.role = role;
+
+  // Sub-department (may be null to clear, or a valid id belonging to the dept)
+  if (subDepartmentId !== undefined) {
+    if (subDepartmentId === null || subDepartmentId === "") {
+      data.subDepartmentId = null;
+    } else {
+      const sub = await db.subDepartment.findUnique({ where: { id: subDepartmentId } });
+      const effectiveDept = (data.department as string) ?? existing.department;
+      if (!sub || sub.department !== effectiveDept) {
+        return NextResponse.json(
+          { error: "زیرمجموعه انتخاب‌شده متعلق به این بخش نیست." },
+          { status: 400 }
+        );
+      }
+      data.subDepartmentId = sub.id;
+    }
+  }
 
   const updated = await db.member.update({
     where: { id },
     data,
-    include: { _count: { select: { tasks: true } } },
+    include: { _count: { select: { tasks: true } }, subDepartment: true },
   });
 
   const activeCount = await db.task.count({

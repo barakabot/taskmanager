@@ -12,7 +12,29 @@ async function main() {
   await db.followUpLog.deleteMany();
   await db.task.deleteMany();
   await db.member.deleteMany();
+  await db.subDepartment.deleteMany();
   await db.dailyReport.deleteMany();
+
+  // ---- Sub-departments (sub-units within each department) ----
+  const subDepts = await db.subDepartment.createMany({
+    data: [
+      // Fantasy sub-units
+      { name: "تأمین کالای داخلی", department: "FANTASY" },
+      { name: "تأمین کالای وارداتی", department: "FANTASY" },
+      // Non-fantasy sub-units
+      { name: "انبار مرکزی", department: "NON_FANTASY" },
+      { name: "حمل‌ونقل", department: "NON_FANTASY" },
+      // BI sub-units
+      { name: "تحلیل فروش", department: "BI" },
+      { name: "گزارش‌های مدیریتی", department: "BI" },
+      // Commission sub-units
+      { name: "پورسانت نمایندگان", department: "COMMISSION" },
+      { name: "تسویه شعب", department: "COMMISSION" },
+    ],
+  });
+  const allSubDepts = await db.subDepartment.findMany();
+  const subId = (dept: string, name: string) =>
+    allSubDepts.find((s) => s.department === dept && s.name === name)?.id ?? null;
 
   // ---- Members ----
   const manager = await db.member.create({
@@ -28,17 +50,17 @@ async function main() {
   const members = await db.member.createMany({
     data: [
       // Fantasy supply
-      { name: "علی محمدی", handle: "@ali", password: "1234", department: "FANTASY", role: "MEMBER" },
-      { name: "سارا کریمی", handle: "@sara", password: "1234", department: "FANTASY", role: "MEMBER" },
+      { name: "علی محمدی", handle: "@ali", password: "1234", department: "FANTASY", role: "MEMBER", subDepartmentId: subId("FANTASY", "تأمین کالای داخلی") },
+      { name: "سارا کریمی", handle: "@sara", password: "1234", department: "FANTASY", role: "MEMBER", subDepartmentId: subId("FANTASY", "تأمین کالای وارداتی") },
       // Non-fantasy supply
-      { name: "حسین احمدی", handle: "@hossein", password: "1234", department: "NON_FANTASY", role: "MEMBER" },
-      { name: "مریم نوری", handle: "@maryam", password: "1234", department: "NON_FANTASY", role: "MEMBER" },
+      { name: "حسین احمدی", handle: "@hossein", password: "1234", department: "NON_FANTASY", role: "MEMBER", subDepartmentId: subId("NON_FANTASY", "انبار مرکزی") },
+      { name: "مریم نوری", handle: "@maryam", password: "1234", department: "NON_FANTASY", role: "MEMBER", subDepartmentId: subId("NON_FANTASY", "حمل‌ونقل") },
       // BI
-      { name: "رضا قاسمی", handle: "@reza", password: "1234", department: "BI", role: "MEMBER" },
-      { name: "فاطمه موسوی", handle: "@fateme", password: "1234", department: "BI", role: "MEMBER" },
+      { name: "رضا قاسمی", handle: "@reza", password: "1234", department: "BI", role: "MEMBER", subDepartmentId: subId("BI", "تحلیل فروش") },
+      { name: "فاطمه موسوی", handle: "@fateme", password: "1234", department: "BI", role: "MEMBER", subDepartmentId: subId("BI", "گزارش‌های مدیریتی") },
       // Commission
-      { name: "امیر تهرانی", handle: "@amir", password: "1234", department: "COMMISSION", role: "MEMBER" },
-      { name: "زهرا شریفی", handle: "@zahra", password: "1234", department: "COMMISSION", role: "MEMBER" },
+      { name: "امیر تهرانی", handle: "@amir", password: "1234", department: "COMMISSION", role: "MEMBER", subDepartmentId: subId("COMMISSION", "پورسانت نمایندگان") },
+      { name: "زهرا شریفی", handle: "@zahra", password: "1234", department: "COMMISSION", role: "MEMBER", subDepartmentId: subId("COMMISSION", "تسویه شعب") },
     ],
   });
 
@@ -256,6 +278,7 @@ async function main() {
         title: t.title,
         description: t.description ?? null,
         department: t.department,
+        subDepartmentId: assignee.subDepartmentId,
         assigneeId: assignee.id,
         priority: t.priority,
         status: t.status,

@@ -22,7 +22,7 @@ export async function GET() {
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const tasks = await db.task.findMany({
-    include: { assignee: true },
+    include: { assignee: true, subDepartment: true },
     orderBy: { deadline: "asc" },
   });
 

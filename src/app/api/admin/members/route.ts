@@ -12,7 +12,7 @@ export async function GET() {
     return NextResponse.json({ error: "دسترسی فقط برای مدیر." }, { status: 403 });
 
   const members = await db.member.findMany({
-    include: { _count: { select: { tasks: true } } },
+    include: { _count: { select: { tasks: true } }, subDepartment: true },
     orderBy: [{ role: "desc" }, { name: "asc" }],
   });
   const activeCounts = await db.task.groupBy({
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "دسترسی فقط برای مدیر." }, { status: 403 });
 
   const body = await req.json();
-  const { name, handle, password, department, role } = body ?? {};
+  const { name, handle, password, department, role, subDepartmentId } = body ?? {};
 
   if (!name || !handle || !department) {
     return NextResponse.json(
@@ -47,6 +47,19 @@ export async function POST(req: NextRequest) {
   }
   if (!DEPARTMENTS.some((d) => d.key === department)) {
     return NextResponse.json({ error: "بخش نامعتبر است." }, { status: 400 });
+  }
+
+  // Validate sub-department belongs to the chosen department (if provided)
+  let validSubId: string | null = null;
+  if (subDepartmentId) {
+    const sub = await db.subDepartment.findUnique({ where: { id: subDepartmentId } });
+    if (!sub || sub.department !== department) {
+      return NextResponse.json(
+        { error: "زیرمجموعه انتخاب‌شده متعلق به این بخش نیست." },
+        { status: 400 }
+      );
+    }
+    validSubId = sub.id;
   }
 
   const normalizedHandle = handle.trim().startsWith("@") ? handle.trim() : `@${handle.trim()}`;
@@ -62,9 +75,10 @@ export async function POST(req: NextRequest) {
       handle: normalizedHandle,
       password: (password || "1234").trim(),
       department,
+      subDepartmentId: validSubId,
       role: role === "MANAGER" ? "MANAGER" : "MEMBER",
     },
-    include: { _count: { select: { tasks: true } } },
+    include: { _count: { select: { tasks: true } }, subDepartment: true },
   });
 
   return NextResponse.json({ member: serializeMember(member, 0, true) });

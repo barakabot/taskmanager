@@ -15,7 +15,7 @@ export async function GET() {
     // Members see only themselves
     const self = await db.member.findUnique({
       where: { id: me.id },
-      include: { _count: { select: { tasks: true } } },
+      include: { _count: { select: { tasks: true } }, subDepartment: true },
     });
     const activeCount = await db.task.count({
       where: { assigneeId: me.id, status: { not: "DONE" } },
@@ -26,6 +26,7 @@ export async function GET() {
   const members = await db.member.findMany({
     include: {
       _count: { select: { tasks: true } },
+      subDepartment: true,
     },
     orderBy: [{ role: "desc" }, { name: "asc" }],
   });

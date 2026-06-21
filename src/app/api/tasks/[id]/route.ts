@@ -47,7 +47,7 @@ export async function PATCH(
   const updated = await db.task.update({
     where: { id },
     data,
-    include: { assignee: true },
+    include: { assignee: true, subDepartment: true },
   });
 
   // Log the change
@@ -94,7 +94,7 @@ export async function GET(
   const { id } = await params;
   const task = await db.task.findUnique({
     where: { id },
-    include: { assignee: true, logs: { orderBy: { createdAt: "desc" }, take: 30 } },
+    include: { assignee: true, subDepartment: true, logs: { orderBy: { createdAt: "desc" }, take: 30 } },
   });
   if (!task) return NextResponse.json({ error: "تسک یافت نشد." }, { status: 404 });
   if (!canAccessTask(me, task.assigneeId)) {

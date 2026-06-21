@@ -17,6 +17,7 @@ import { NewTaskDialog } from "./new-task-dialog";
 import { OverviewView } from "./overview-view";
 import { KanbanView } from "./kanban-view";
 import { TaskListView } from "./task-list-view";
+import { CalendarView } from "./calendar-view";
 import { BIView } from "./bi-view";
 import { ReportsView } from "./reports-view";
 import { MyTasksView } from "./my-tasks-view";
@@ -47,6 +48,7 @@ import {
   LogOut,
   ChevronDown,
   Crown,
+  CalendarDays,
 } from "lucide-react";
 
 type NavItem = {
@@ -61,6 +63,7 @@ const ALL_NAV: NavItem[] = [
   { key: "overview", label: "داشبورد", icon: LayoutDashboard, desc: "نمای کلی و شاخص‌ها" },
   { key: "kanban", label: "کانبان", icon: KanbanSquare, desc: "نمودار کانبان با درگ‌اند‌دراپ" },
   { key: "list", label: "لیست تسک‌ها", icon: ListChecks, desc: "جدول با فیلترهای پیشرفته" },
+  { key: "calendar", label: "تقویم", icon: CalendarDays, desc: "تقویم شمسی تسک‌ها" },
   { key: "bi", label: "هوش تجاری", icon: BarChart3, desc: "نمودارها و هیت‌مپ", managerOnly: true },
   { key: "reports", label: "گزارش‌ها", icon: FileBarChart, desc: "صبحگاهی و پایان روز", managerOnly: true },
   { key: "mytasks", label: "کارهای من", icon: CheckSquare, desc: "تسک‌های شخصی من" },
@@ -414,6 +417,7 @@ export function DashboardShell() {
             {view === "list" && (
               <TaskListView filters={filters} setFilters={setFilters} />
             )}
+            {view === "calendar" && <CalendarView />}
             {view === "bi" && isManager && <BIView />}
             {view === "reports" && isManager && <ReportsView />}
             {view === "mytasks" && <MyTasksView />}

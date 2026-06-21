@@ -6,6 +6,7 @@ export type ViewKey =
   | "overview"
   | "kanban"
   | "list"
+  | "calendar"
   | "bi"
   | "reports"
   | "mytasks"
