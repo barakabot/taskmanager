@@ -12,11 +12,12 @@ export type SerializedTask = {
   assigneeHandle: string;
   priority: string;
   status: string;
-  deadline: string; // ISO
+  startTime: string | null; // planned start (ISO)
+  deadline: string; // planned completion / due date (ISO)
   link: string | null;
   followUpReason: string | null;
-  startedAt: string | null;
-  doneAt: string | null;
+  startedAt: string | null; // actual start (ISO)
+  doneAt: string | null; // actual completion (ISO)
   createdAt: string;
   updatedAt: string;
 };
@@ -35,6 +36,7 @@ export function serializeTask(
     assigneeHandle: task.assignee?.handle ?? "—",
     priority: task.priority,
     status: task.status,
+    startTime: task.startTime ? task.startTime.toISOString() : null,
     deadline: task.deadline.toISOString(),
     link: task.link,
     followUpReason: task.followUpReason,

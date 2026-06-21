@@ -161,19 +161,37 @@ export function TaskDetailSheet({ task, open, onOpenChange, onUpdated }: Props) 
               />
               <MetaRow
                 icon={<CalendarClock className="h-4 w-4" />}
-                label="ددلاین"
+                label="ددلاین (تاریخ انجام)"
                 value={`${formatJalaliLong(dl)} — ${toPersianDigits(
                   formatTime(dl)
                 )}`}
                 highlight={overdue}
               />
+              {task.startTime && (
+                <MetaRow
+                  icon={<PlayCircle className="h-4 w-4" />}
+                  label="زمان شروع برنامه‌ریزی‌شده"
+                  value={`${formatJalaliLong(new Date(task.startTime))} — ${toPersianDigits(
+                    formatTime(new Date(task.startTime))
+                  )}`}
+                />
+              )}
               <MetaRow
                 icon={<Clock className="h-4 w-4" />}
-                label="ساعت ثبت"
+                label="زمان ثبت تسک"
                 value={`${formatJalaliDate(new Date(task.createdAt))} ${toPersianDigits(
                   formatTime(new Date(task.createdAt))
                 )}`}
               />
+              {task.startedAt && (
+                <MetaRow
+                  icon={<PlayCircle className="h-4 w-4" />}
+                  label="شروع واقعی کار"
+                  value={`${formatJalaliDate(new Date(task.startedAt))} ${toPersianDigits(
+                    formatTime(new Date(task.startedAt))
+                  )}`}
+                />
+              )}
               {task.doneAt && (
                 <MetaRow
                   icon={<CheckCircle2 className="h-4 w-4" />}

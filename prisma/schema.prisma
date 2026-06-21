@@ -35,11 +35,12 @@ model Task {
   assignee       Member   @relation(fields: [assigneeId], references: [id])
   priority       String   @default("MEDIUM") // HIGH | MEDIUM | LOW
   status         String   @default("PENDING") // PENDING | STARTED | BLOCKED | DONE
-  deadline       DateTime
+  startTime      DateTime? // planned start (when work should begin)
+  deadline       DateTime  // planned completion / due date
   link           String?
   followUpReason String?  // DEPENDENT_ON_OTHERS | LACK_OF_INFO | HIGH_WORKLOAD | TECHNICAL_ISSUE | OTHER
-  startedAt      DateTime?
-  doneAt         DateTime?
+  startedAt      DateTime? // actual start (set when status -> STARTED)
+  doneAt         DateTime? // actual completion (set when status -> DONE)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   logs           FollowUpLog[]

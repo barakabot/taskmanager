@@ -26,7 +26,7 @@ import { deptClasses, deptDot } from "./badges";
 import type { SerializedMember } from "@/lib/serialize";
 import { useQuery } from "@tanstack/react-query";
 import { formatJalaliLong, toPersianDigits, toGregorian, toEnglishDigits } from "@/lib/jalali";
-import { CalendarClock, Check, ChevronLeft, ChevronRight, Plus, User } from "lucide-react";
+import { CalendarClock, Check, ChevronLeft, ChevronRight, Plus, User, PlayCircle, CalendarRange } from "lucide-react";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -41,7 +41,7 @@ const STEPS = [
   { key: "department", label: "بخش" },
   { key: "assignee", label: "مسئول" },
   { key: "priority", label: "اولویت" },
-  { key: "deadline", label: "ددلاین" },
+  { key: "schedule", label: "زمان‌بندی" },
 ] as const;
 
 export function NewTaskDialog({ open, onOpenChange, onCreated }: Props) {
@@ -52,6 +52,8 @@ export function NewTaskDialog({ open, onOpenChange, onCreated }: Props) {
   const [assigneeId, setAssigneeId] = React.useState<string | null>(null);
   const [priority, setPriority] = React.useState<PriorityKey | null>(null);
   const [link, setLink] = React.useState("");
+  const [startDate, setStartDate] = React.useState<Date | null>(null);
+  const [startTime, setStartTime] = React.useState("09:00");
   const [deadlineDate, setDeadlineDate] = React.useState<Date | null>(null);
   const [deadlineTime, setDeadlineTime] = React.useState("18:00");
   const [busy, setBusy] = React.useState(false);
@@ -75,6 +77,8 @@ export function NewTaskDialog({ open, onOpenChange, onCreated }: Props) {
         setAssigneeId(null);
         setPriority(null);
         setLink("");
+        setStartDate(null);
+        setStartTime("09:00");
         setDeadlineDate(null);
         setDeadlineTime("18:00");
       }, 200);
@@ -96,7 +100,7 @@ export function NewTaskDialog({ open, onOpenChange, onCreated }: Props) {
         return !!assigneeId;
       case "priority":
         return !!priority;
-      case "deadline":
+      case "schedule":
         return !!deadlineDate;
     }
   };
@@ -112,9 +116,24 @@ export function NewTaskDialog({ open, onOpenChange, onCreated }: Props) {
     if (!canNext() || !department || !assigneeId || !priority || !deadlineDate) return;
     setBusy(true);
     try {
-      const [hh, mm] = deadlineTime.split(":").map((n) => parseInt(toEnglishDigits(n), 10));
+      const [dhh, dmm] = deadlineTime.split(":").map((n) => parseInt(toEnglishDigits(n), 10));
       const d = new Date(deadlineDate);
-      d.setHours(hh || 18, mm || 0, 0, 0);
+      d.setHours(dhh || 18, dmm || 0, 0, 0);
+
+      // Build optional start datetime
+      let startISO: string | undefined;
+      if (startDate) {
+        const [shh, smm] = startTime.split(":").map((n) => parseInt(toEnglishDigits(n), 10));
+        const s = new Date(startDate);
+        s.setHours(shh || 9, smm || 0, 0, 0);
+        if (s.getTime() >= d.getTime()) {
+          toast.error("زمان شروع باید قبل از ددلاین باشد.");
+          setBusy(false);
+          return;
+        }
+        startISO = s.toISOString();
+      }
+
       const res = await fetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -125,6 +144,7 @@ export function NewTaskDialog({ open, onOpenChange, onCreated }: Props) {
           assigneeId,
           priority,
           deadline: d.toISOString(),
+          startTime: startISO,
           link: link.trim() || undefined,
         }),
       });
@@ -151,6 +171,15 @@ export function NewTaskDialog({ open, onOpenChange, onCreated }: Props) {
         const [hh, mm] = deadlineTime.split(":").map((n) => parseInt(toEnglishDigits(n), 10));
         const d = new Date(deadlineDate);
         d.setHours(hh || 18, mm || 0, 0, 0);
+        return d;
+      })()
+    : null;
+
+  const finalStart = startDate
+    ? (() => {
+        const [hh, mm] = startTime.split(":").map((n) => parseInt(toEnglishDigits(n), 10));
+        const d = new Date(startDate);
+        d.setHours(hh || 9, mm || 0, 0, 0);
         return d;
       })()
     : null;
@@ -341,57 +370,173 @@ export function NewTaskDialog({ open, onOpenChange, onCreated }: Props) {
               </div>
             )}
 
-            {STEPS[step].key === "deadline" && (
-              <div className="space-y-3">
-                <Label>ددلاین (تاریخ و ساعت دقیق) *</Label>
+            {STEPS[step].key === "schedule" && (
+              <div className="space-y-4">
                 <p className="text-xs text-muted-foreground">
-                  هیچ تسکی بدون ددلاین ثبت نمی‌شود. زمان‌سنجی بر اساس Asia/Tehran است.
+                  زمان شروع و ددلاین تسک را مشخص کنید. زمان شروع اختیاری است ولی ددلاین
+                  الزامی است. زمان‌سنجی بر اساس Asia/Tehran است.
                 </p>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="flex-1">
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className="w-full justify-start text-right font-normal"
-                        >
-                          <CalendarClock className="h-4 w-4" />
-                          {deadlineDate
-                            ? formatJalaliLong(deadlineDate)
-                            : "انتخاب تاریخ..."}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={deadlineDate ?? undefined}
-                          onSelect={(d) => d && setDeadlineDate(d)}
-                          disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                  <div className="w-full sm:w-32">
-                    <Input
-                      type="time"
-                      value={deadlineTime}
-                      onChange={(e) => setDeadlineTime(e.target.value)}
-                      dir="ltr"
-                    />
+
+                {/* Start time (optional) */}
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1.5">
+                    <PlayCircle className="h-4 w-4 text-sky-500" />
+                    زمان شروع (اختیاری)
+                  </Label>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="flex-1">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start text-right font-normal"
+                          >
+                            <CalendarRange className="h-4 w-4" />
+                            {startDate
+                              ? formatJalaliLong(startDate)
+                              : "انتخاب تاریخ شروع..."}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={startDate ?? undefined}
+                            onSelect={(d) => {
+                              if (d) {
+                                setStartDate(d);
+                                // If no deadline yet, clear; if deadline before start, leave for validation
+                              }
+                            }}
+                            disabled={(d) => {
+                              const today = new Date(new Date().setHours(0, 0, 0, 0));
+                              if (d < today) return true;
+                              if (deadlineDate && d > deadlineDate) return true;
+                              return false;
+                            }}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div className="w-full sm:w-32">
+                      <Input
+                        type="time"
+                        value={startTime}
+                        onChange={(e) => setStartTime(e.target.value)}
+                        dir="ltr"
+                      />
+                    </div>
+                    {startDate && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="shrink-0"
+                        onClick={() => setStartDate(null)}
+                      >
+                        حذف
+                      </Button>
+                    )}
                   </div>
                 </div>
-                {finalDeadline && (
-                  <div className="rounded-lg border bg-muted/40 p-3 text-sm">
-                    <span className="text-muted-foreground">ددلاین نهایی:</span>{" "}
-                    <span className="font-medium nums-fa">
-                      {formatJalaliLong(finalDeadline)} —{" "}
-                      {toPersianDigits(
-                        `${String(finalDeadline.getHours()).padStart(2, "0")}:${String(
-                          finalDeadline.getMinutes()
-                        ).padStart(2, "0")}`
-                      )}
-                    </span>
+
+                {/* Deadline (required) */}
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1.5">
+                    <CalendarClock className="h-4 w-4 text-rose-500" />
+                    ددلاین (تاریخ و ساعت دقیق) *
+                  </Label>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="flex-1">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start text-right font-normal"
+                          >
+                            <CalendarClock className="h-4 w-4" />
+                            {deadlineDate
+                              ? formatJalaliLong(deadlineDate)
+                              : "انتخاب تاریخ ددلاین..."}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={deadlineDate ?? undefined}
+                            onSelect={(d) => d && setDeadlineDate(d)}
+                            disabled={(d) => {
+                              const today = new Date(new Date().setHours(0, 0, 0, 0));
+                              if (d < today) return true;
+                              if (startDate && d < startDate) return true;
+                              return false;
+                            }}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div className="w-full sm:w-32">
+                      <Input
+                        type="time"
+                        value={deadlineTime}
+                        onChange={(e) => setDeadlineTime(e.target.value)}
+                        dir="ltr"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Summary preview */}
+                {(startDate || deadlineDate) && (
+                  <div className="rounded-lg border bg-muted/40 p-3 text-sm space-y-1.5">
+                    {finalStart && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground flex items-center gap-1.5">
+                          <PlayCircle className="h-3.5 w-3.5 text-sky-500" />
+                          شروع:
+                        </span>
+                        <span className="font-medium nums-fa">
+                          {formatJalaliLong(finalStart)} —{" "}
+                          {toPersianDigits(
+                            `${String(finalStart.getHours()).padStart(2, "0")}:${String(
+                              finalStart.getMinutes()
+                            ).padStart(2, "0")}`
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    {finalDeadline && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground flex items-center gap-1.5">
+                          <CalendarClock className="h-3.5 w-3.5 text-rose-500" />
+                          ددلاین:
+                        </span>
+                        <span className="font-medium nums-fa">
+                          {formatJalaliLong(finalDeadline)} —{" "}
+                          {toPersianDigits(
+                            `${String(finalDeadline.getHours()).padStart(2, "0")}:${String(
+                              finalDeadline.getMinutes()
+                            ).padStart(2, "0")}`
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    {finalStart && finalDeadline && (
+                      <div className="flex items-center justify-between pt-1.5 border-t">
+                        <span className="text-muted-foreground">مدت زمان:</span>
+                        <span className="font-medium nums-fa text-primary">
+                          {toPersianDigits(
+                            Math.max(
+                              1,
+                              Math.round(
+                                (finalDeadline.getTime() - finalStart.getTime()) / 3600000
+                              )
+                            )
+                          )}{" "}
+                          ساعت
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

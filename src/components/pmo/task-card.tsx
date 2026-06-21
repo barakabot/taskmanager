@@ -16,7 +16,7 @@ import {
   isToday,
   daysBetween,
 } from "@/lib/jalali";
-import { CalendarClock, Link2, AlertTriangle, GripVertical } from "lucide-react";
+import { CalendarClock, Link2, AlertTriangle, GripVertical, PlayCircle } from "lucide-react";
 
 interface Props {
   task: SerializedTask;
@@ -36,9 +36,11 @@ export function TaskCard({
   isDragging,
 }: Props) {
   const dl = new Date(task.deadline);
+  const st = task.startTime ? new Date(task.startTime) : null;
   const overdue = isOverdue(dl, task.status);
   const today = isToday(dl);
   const days = daysBetween(dl, new Date());
+  const notStartedYet = st && task.status === "PENDING" && st.getTime() > Date.now();
 
   return (
     <Card
@@ -59,7 +61,7 @@ export function TaskCard({
           <GripVertical className="h-4 w-4" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 mb-1.5">
+          <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
             <span className="font-mono text-[10px] text-muted-foreground">
               {task.code}
             </span>
@@ -72,6 +74,12 @@ export function TaskCard({
                     ({toPersianDigits(Math.abs(days))} روز)
                   </span>
                 )}
+              </span>
+            )}
+            {notStartedYet && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] text-sky-600 dark:text-sky-400 font-medium">
+                <PlayCircle className="h-3 w-3" />
+                شروع از {toPersianDigits(formatJalaliDate(st!))}
               </span>
             )}
           </div>
@@ -91,20 +99,28 @@ export function TaskCard({
               </span>
               <span className="truncate">{task.assigneeName}</span>
             </div>
-            <div
-              className={cn(
-                "flex items-center gap-1 shrink-0 nums-fa",
-                overdue
-                  ? "text-rose-600 dark:text-rose-400 font-medium"
-                  : today
-                  ? "text-amber-600 dark:text-amber-400 font-medium"
-                  : "text-muted-foreground"
+            <div className="flex items-center gap-2 shrink-0">
+              {st && !compact && (
+                <span className="flex items-center gap-1 nums-fa text-sky-600 dark:text-sky-400">
+                  <PlayCircle className="h-3 w-3" />
+                  {toPersianDigits(formatTime(st))}
+                </span>
               )}
-            >
-              <CalendarClock className="h-3 w-3" />
-              {formatJalaliDate(dl)}{" "}
-              <span className="opacity-70">
-                {toPersianDigits(formatTime(dl))}
+              <span
+                className={cn(
+                  "flex items-center gap-1 nums-fa",
+                  overdue
+                    ? "text-rose-600 dark:text-rose-400 font-medium"
+                    : today
+                    ? "text-amber-600 dark:text-amber-400 font-medium"
+                    : "text-muted-foreground"
+                )}
+              >
+                <CalendarClock className="h-3 w-3" />
+                {formatJalaliDate(dl)}{" "}
+                <span className="opacity-70">
+                  {toPersianDigits(formatTime(dl))}
+                </span>
               </span>
             </div>
           </div>

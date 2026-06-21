@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { title, department, assigneeId, priority, deadline, link, description } = body ?? {};
+  const { title, department, assigneeId, priority, deadline, startTime, link, description } = body ?? {};
 
   if (!title || !department || !assigneeId || !priority || !deadline) {
     return NextResponse.json(
@@ -77,6 +77,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "مسئول یافت نشد." }, { status: 400 });
   }
 
+  // Validate that start time (if provided) is before the deadline.
+  const deadlineDate = new Date(deadline);
+  const startDate = startTime ? new Date(startTime) : null;
+  if (startDate && startDate.getTime() >= deadlineDate.getTime()) {
+    return NextResponse.json(
+      { error: "زمان شروع باید قبل از ددلاین باشد." },
+      { status: 400 }
+    );
+  }
+
   // Generate next code
   const count = await db.task.count();
   const code = `TSK-${String(count + 1).padStart(4, "0")}`;
@@ -89,7 +99,8 @@ export async function POST(req: NextRequest) {
       department,
       assigneeId,
       priority,
-      deadline: new Date(deadline),
+      deadline: deadlineDate,
+      startTime: startDate,
       link: link ?? null,
       status: "PENDING",
     },

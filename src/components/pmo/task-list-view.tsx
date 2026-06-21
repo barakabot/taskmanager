@@ -239,26 +239,28 @@ export function TaskListView({
                   <TableHead className="w-[130px]">بخش</TableHead>
                   <TableHead className="w-[90px]">اولویت</TableHead>
                   <TableHead className="w-[110px]">وضعیت</TableHead>
+                  <TableHead className="w-[120px]">شروع</TableHead>
                   <TableHead className="w-[140px]">ددلاین</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                       در حال بارگذاری...
                     </TableCell>
                   </TableRow>
                 )}
                 {!isLoading && tasks.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-12">
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
                       تسکی با این فیلترها یافت نشد.
                     </TableCell>
                   </TableRow>
                 )}
                 {tasks.map((task) => {
                   const dl = new Date(task.deadline);
+                  const st = task.startTime ? new Date(task.startTime) : null;
                   const overdue = isOverdue(dl, task.status);
                   return (
                     <TableRow
@@ -291,6 +293,11 @@ export function TaskListView({
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={task.status} />
+                      </TableCell>
+                      <TableCell className="nums-fa text-xs text-sky-600 dark:text-sky-400">
+                        {st
+                          ? `${formatJalaliDate(st)} ${toPersianDigits(formatTime(st))}`
+                          : "—"}
                       </TableCell>
                       <TableCell
                         className={cn(

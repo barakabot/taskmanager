@@ -247,6 +247,8 @@ async function main() {
       t.status === "DONE" && t.doneOffsetDays !== undefined
         ? new Date(now.getTime() + t.doneOffsetDays * day)
         : null;
+    // Planned start = 2 days before deadline, but never before the creation date.
+    const startTime = new Date(Math.max(deadline.getTime() - 2 * day, created.getTime()));
 
     await db.task.create({
       data: {
@@ -257,6 +259,7 @@ async function main() {
         assigneeId: assignee.id,
         priority: t.priority,
         status: t.status,
+        startTime,
         deadline,
         link: t.link ?? null,
         followUpReason: t.followUpReason ?? null,
