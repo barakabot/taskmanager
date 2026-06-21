@@ -3,10 +3,22 @@ import { db } from "@/lib/db";
 import { serializeTask } from "@/lib/serialize";
 import { isSameDay, formatJalaliDate, toPersianDigits } from "@/lib/jalali";
 import { FOLLOW_UP_REASONS, DEPARTMENTS } from "@/lib/constants";
+import { getCurrentMember } from "@/lib/auth";
 
-// GET /api/reports/evening
+// GET /api/reports/evening (MANAGER ONLY)
 // Simulates the 19:00 cron job: comprehensive manager report.
 export async function GET() {
+  const me = await getCurrentMember();
+  if (!me) {
+    return NextResponse.json({ error: "نشست نامعتبر است." }, { status: 401 });
+  }
+  if (me.role !== "MANAGER") {
+    return NextResponse.json(
+      { error: "گزارش پایان روز فقط برای مدیر قابل دسترسی است." },
+      { status: 403 }
+    );
+  }
+
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const tasks = await db.task.findMany({

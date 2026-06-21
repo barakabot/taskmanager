@@ -41,9 +41,12 @@ import {
   AlertOctagon,
 } from "lucide-react";
 import { FOLLOW_UP_REASONS } from "@/lib/constants";
+import { usePMOStore } from "@/lib/pmo-store";
 
 export function MyTasksView() {
   const queryClient = useQueryClient();
+  const me = usePMOStore((s) => s.member);
+  const isManager = me?.role === "MANAGER";
   const [selected, setSelected] = React.useState<SerializedTask | null>(null);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [showReasonFor, setShowReasonFor] = React.useState<string | null>(null);
@@ -55,25 +58,34 @@ export function MyTasksView() {
       const r = await fetch("/api/members");
       return (await r.json()) as { members: SerializedMember[] };
     },
+    enabled: isManager,
   });
 
+  // Managers can pick any member to preview; members are locked to themselves.
   const members = (membersData?.members ?? []).filter((m) => m.role === "MEMBER");
-  const [memberId, setMemberId] = React.useState<string>(members[0]?.id ?? "");
+  const [memberId, setMemberId] = React.useState<string>(me?.id ?? "");
 
   React.useEffect(() => {
-    if (!memberId && members.length > 0) setMemberId(members[0].id);
-  }, [members, memberId]);
+    if (me && !isManager) setMemberId(me.id);
+  }, [me, isManager]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["tasks", "mytasks", memberId],
+    queryKey: ["tasks", "mytasks", memberId, me?.id],
     queryFn: async () => {
-      const r = await fetch(`/api/tasks?assigneeId=${memberId}`);
+      // For members, the API ignores assigneeId and returns own tasks.
+      // For managers, assigneeId filters to the selected member.
+      const params = new URLSearchParams();
+      if (isManager && memberId) params.set("assigneeId", memberId);
+      const r = await fetch(`/api/tasks?${params.toString()}`);
+      if (r.status === 401) return { tasks: [] as SerializedTask[] };
       return (await r.json()) as { tasks: SerializedTask[] };
     },
-    enabled: !!memberId,
+    enabled: !!me,
   });
 
-  const member = members.find((m) => m.id === memberId);
+  const member = isManager
+    ? members.find((m) => m.id === memberId) ?? members[0]
+    : me;
   const tasks = data?.tasks ?? [];
   const active = tasks.filter((t) => t.status !== "DONE");
   const done = tasks.filter((t) => t.status === "DONE");
@@ -131,22 +143,32 @@ export function MyTasksView() {
     <div className="h-full flex flex-col gap-3">
       {/* Member picker */}
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
-          <User className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm text-muted-foreground">نمای کاربر:</span>
-        </div>
-        <Select value={memberId} onValueChange={setMemberId}>
-          <SelectTrigger className="w-[220px]">
-            <SelectValue placeholder="انتخاب کاربر..." />
-          </SelectTrigger>
-          <SelectContent>
-            {members.map((m) => (
-              <SelectItem key={m.id} value={m.id}>
-                {m.name} — {m.handle}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {isManager ? (
+          <>
+            <div className="flex items-center gap-2">
+              <User className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">پیش‌نمایش کاربر:</span>
+            </div>
+            <Select value={memberId} onValueChange={setMemberId}>
+              <SelectTrigger className="w-[220px]">
+                <SelectValue placeholder="انتخاب کاربر..." />
+              </SelectTrigger>
+              <SelectContent>
+                {members.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name} — {m.handle}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </>
+        ) : (
+          <div className="flex items-center gap-2">
+            <User className="h-4 w-4 text-primary" />
+            <span className="text-sm font-medium">{me?.name}</span>
+            <span className="text-xs text-muted-foreground" dir="ltr">{me?.handle}</span>
+          </div>
+        )}
         {member && <DepartmentBadge department={member.department} />}
         <div className="flex items-center gap-1.5 mr-auto text-xs">
           <span className="rounded-md bg-sky-100 text-sky-700 px-2 py-0.5 nums-fa dark:bg-sky-950/40 dark:text-sky-300">

@@ -15,10 +15,12 @@ model Member {
   id         String   @id @default(cuid())
   name       String
   handle     String   @unique // telegram handle or internal id, e.g. @ali
+  password   String   @default("1234") // demo password; resettable from admin panel
   department String   // FANTASY | NON_FANTASY | BI | COMMISSION
   role       String   @default("MEMBER") // MANAGER | MEMBER
   avatar     String?
   createdAt  DateTime @default(now())
+  lastLoginAt DateTime?
   tasks      Task[]
 }
 

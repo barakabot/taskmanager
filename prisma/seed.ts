@@ -19,6 +19,7 @@ async function main() {
     data: {
       name: "مهندس رضایی",
       handle: "@manager",
+      password: "admin",
       department: "BI",
       role: "MANAGER",
     },
@@ -27,17 +28,17 @@ async function main() {
   const members = await db.member.createMany({
     data: [
       // Fantasy supply
-      { name: "علی محمدی", handle: "@ali", department: "FANTASY", role: "MEMBER" },
-      { name: "سارا کریمی", handle: "@sara", department: "FANTASY", role: "MEMBER" },
+      { name: "علی محمدی", handle: "@ali", password: "1234", department: "FANTASY", role: "MEMBER" },
+      { name: "سارا کریمی", handle: "@sara", password: "1234", department: "FANTASY", role: "MEMBER" },
       // Non-fantasy supply
-      { name: "حسین احمدی", handle: "@hossein", department: "NON_FANTASY", role: "MEMBER" },
-      { name: "مریم نوری", handle: "@maryam", department: "NON_FANTASY", role: "MEMBER" },
+      { name: "حسین احمدی", handle: "@hossein", password: "1234", department: "NON_FANTASY", role: "MEMBER" },
+      { name: "مریم نوری", handle: "@maryam", password: "1234", department: "NON_FANTASY", role: "MEMBER" },
       // BI
-      { name: "رضا قاسمی", handle: "@reza", department: "BI", role: "MEMBER" },
-      { name: "فاطمه موسوی", handle: "@fateme", department: "BI", role: "MEMBER" },
+      { name: "رضا قاسمی", handle: "@reza", password: "1234", department: "BI", role: "MEMBER" },
+      { name: "فاطمه موسوی", handle: "@fateme", password: "1234", department: "BI", role: "MEMBER" },
       // Commission
-      { name: "امیر تهرانی", handle: "@amir", department: "COMMISSION", role: "MEMBER" },
-      { name: "زهرا شریفی", handle: "@zahra", department: "COMMISSION", role: "MEMBER" },
+      { name: "امیر تهرانی", handle: "@amir", password: "1234", department: "COMMISSION", role: "MEMBER" },
+      { name: "زهرا شریفی", handle: "@zahra", password: "1234", department: "COMMISSION", role: "MEMBER" },
     ],
   });
 

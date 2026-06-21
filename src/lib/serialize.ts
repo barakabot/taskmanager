@@ -53,11 +53,14 @@ export type SerializedMember = {
   role: string;
   taskCount: number;
   activeCount: number;
+  password?: string; // only included in admin contexts
+  lastLoginAt: string | null;
 };
 
 export function serializeMember(
   member: Member & { _count?: { tasks: number } },
-  activeCount: number
+  activeCount: number,
+  includePassword = false
 ): SerializedMember {
   return {
     id: member.id,
@@ -67,6 +70,8 @@ export function serializeMember(
     role: member.role,
     taskCount: member._count?.tasks ?? 0,
     activeCount,
+    ...(includePassword ? { password: member.password } : {}),
+    lastLoginAt: member.lastLoginAt ? member.lastLoginAt.toISOString() : null,
   };
 }
 

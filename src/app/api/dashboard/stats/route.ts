@@ -2,15 +2,27 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { toJalali, toPersianDigits } from "@/lib/jalali";
 import { DEPARTMENTS } from "@/lib/constants";
+import { getCurrentMember } from "@/lib/auth";
 
 // GET /api/dashboard/stats
-// Aggregated statistics for the BI dashboard:
+// Aggregated statistics for the BI dashboard (MANAGER ONLY):
 //  - counts by status
 //  - overdue share per department (pie)
 //  - weekly done trend (bar)
 //  - delay heatmap by weekday x hour (which day/hour has most overdue)
 //  - obstacle analysis (blocked reasons)
 export async function GET() {
+  const me = await getCurrentMember();
+  if (!me) {
+    return NextResponse.json({ error: "نشست نامعتبر است." }, { status: 401 });
+  }
+  if (me.role !== "MANAGER") {
+    return NextResponse.json(
+      { error: "داشبورد هوش تجاری فقط برای مدیر قابل دسترسی است." },
+      { status: 403 }
+    );
+  }
+
   const tasks = await db.task.findMany({ include: { assignee: true } });
   const now = new Date();
   const nowMs = now.getTime();

@@ -9,27 +9,45 @@ export type ViewKey =
   | "bi"
   | "reports"
   | "mytasks"
-  | "members";
+  | "members"
+  | "admin";
+
+export type CurrentMember = {
+  id: string;
+  name: string;
+  handle: string;
+  department: string;
+  role: "MANAGER" | "MEMBER";
+};
 
 interface PMOState {
+  // Auth
+  member: CurrentMember | null;
+  authLoading: boolean;
+  setMember: (m: CurrentMember | null) => void;
+  setAuthLoading: (v: boolean) => void;
+  isManager: boolean;
+
+  // Navigation
   view: ViewKey;
   setView: (v: ViewKey) => void;
-  // The "signed-in" perspective. Manager can create tasks; members see their own.
-  currentMemberId: string | null;
-  isManager: boolean;
-  setCurrentMember: (id: string, isManager: boolean) => void;
-  // Last task that was updated (to trigger toasts/refreshes)
+
+  // Task refresh signal
   taskVersion: number;
   bumpTaskVersion: () => void;
 }
 
 export const usePMOStore = create<PMOState>((set) => ({
+  member: null,
+  authLoading: true,
+  setMember: (member) =>
+    set({ member, isManager: member?.role === "MANAGER" }),
+  setAuthLoading: (authLoading) => set({ authLoading }),
+  isManager: false,
+
   view: "overview",
   setView: (view) => set({ view }),
-  currentMemberId: null,
-  isManager: true,
-  setCurrentMember: (currentMemberId, isManager) =>
-    set({ currentMemberId, isManager }),
+
   taskVersion: 0,
   bumpTaskVersion: () => set((s) => ({ taskVersion: s.taskVersion + 1 })),
 }));

@@ -3,10 +3,22 @@ import { db } from "@/lib/db";
 import { serializeTask } from "@/lib/serialize";
 import { isSameDay, formatJalaliDate, formatTime, toPersianDigits } from "@/lib/jalali";
 import { DEPARTMENTS } from "@/lib/constants";
+import { getCurrentMember } from "@/lib/auth";
 
-// GET /api/reports/morning
+// GET /api/reports/morning (MANAGER ONLY)
 // Simulates the 08:00 cron job: for each member, list tasks whose deadline is today or earlier (and not done).
 export async function GET() {
+  const me = await getCurrentMember();
+  if (!me) {
+    return NextResponse.json({ error: "نشست نامعتبر است." }, { status: 401 });
+  }
+  if (me.role !== "MANAGER") {
+    return NextResponse.json(
+      { error: "گزارش‌های صبحگاهی فقط برای مدیر قابل دسترسی است." },
+      { status: 403 }
+    );
+  }
+
   const now = new Date();
   const members = await db.member.findMany({
     where: { role: "MEMBER" },

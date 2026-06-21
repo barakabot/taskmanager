@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   Card,
   CardContent,
@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { DepartmentBadge, PriorityBadge, StatusBadge } from "./badges";
+import { DepartmentBadge, PriorityBadge } from "./badges";
 import type { SerializedTask } from "@/lib/serialize";
 import {
   formatJalaliLong,
@@ -29,8 +29,8 @@ import {
   TrendingUp,
   Plus,
   ArrowLeft,
-  CalendarClock,
   Users,
+  Crown,
 } from "lucide-react";
 import { usePMOStore, type ViewKey } from "@/lib/pmo-store";
 import { cn } from "@/lib/utils";
@@ -67,12 +67,18 @@ interface Props {
 
 export function OverviewView({ onNewTask, tasks }: Props) {
   const setView = usePMOStore((s) => s.setView);
+  const member = usePMOStore((s) => s.member);
+  const isManager = member?.role === "MANAGER";
+
+  // Managers fetch aggregated stats; members compute from their own tasks.
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard-stats"],
     queryFn: async () => {
       const r = await fetch("/api/dashboard/stats");
+      if (!r.ok) return null;
       return (await r.json()) as Stats;
     },
+    enabled: isManager,
   });
 
   const now = new Date();
@@ -82,7 +88,37 @@ export function OverviewView({ onNewTask, tasks }: Props) {
   const overdueTasks = tasks.filter((t) => isOverdue(new Date(t.deadline), t.status));
   const needsFollowUp = [...todayDue, ...overdueTasks.filter((t) => !todayDue.includes(t))].slice(0, 6);
 
-  const t = data?.totals;
+  // Member-local stats (own tasks)
+  const localTotals = {
+    all: tasks.length,
+    PENDING: tasks.filter((t) => t.status === "PENDING").length,
+    STARTED: tasks.filter((t) => t.status === "STARTED").length,
+    BLOCKED: tasks.filter((t) => t.status === "BLOCKED").length,
+    DONE: tasks.filter((t) => t.status === "DONE").length,
+    overdue: overdueTasks.length,
+  };
+
+  // Obstacles from own blocked tasks
+  const reasonCounts: Record<string, number> = {};
+  for (const t of tasks) {
+    if (t.status === "BLOCKED" && t.followUpReason) {
+      reasonCounts[t.followUpReason] = (reasonCounts[t.followUpReason] ?? 0) + 1;
+    }
+  }
+  const reasonLabels: Record<string, string> = {
+    DEPENDENT_ON_OTHERS: "وابسته به شخص دیگر",
+    LACK_OF_INFO: "کمبود اطلاعات",
+    HIGH_WORKLOAD: "حجم بالای کار",
+    TECHNICAL_ISSUE: "مشکل فنی",
+    OTHER: "سایر",
+  };
+  const localObstacles = Object.entries(reasonCounts).map(([k, v]) => ({
+    key: k,
+    label: reasonLabels[k] ?? k,
+    value: v,
+  }));
+
+  const t = isManager ? data?.totals : localTotals;
 
   return (
     <ScrollArea className="h-full scroll-area-pmo">
@@ -95,18 +131,27 @@ export function OverviewView({ onNewTask, tasks }: Props) {
                 <p className="text-sm text-muted-foreground mb-1">
                   {formatJalaliLong(now)} — {toPersianDigits(formatTime(now))}
                 </p>
-                <h2 className="text-2xl font-bold">
-                  خوش آمدید، مدیر واحد برنامه‌ریزی
+                <h2 className="text-2xl font-bold flex items-center gap-2">
+                  خوش آمدید، {member?.name}
+                  {isManager && (
+                    <span className="inline-flex items-center gap-1 text-sm font-normal text-amber-600 dark:text-amber-400">
+                      <Crown className="h-4 w-4" />
+                      مدیر واحد
+                    </span>
+                  )}
                 </h2>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {data?.summaryNote ??
-                    `${toPersianDigits(t?.all ?? 0)} تسک در حال پیگیری، ${toPersianDigits(t?.overdue ?? 0)} مورد عقب‌افتاده.`}
+                  {isManager
+                    ? `${toPersianDigits(t?.all ?? 0)} تسک در حال پیگیری در کل واحد، ${toPersianDigits(t?.overdue ?? 0)} مورد عقب‌افتاده.`
+                    : `شما ${toPersianDigits(localTotals.all)} تسک دارید — ${toPersianDigits(localTotals.overdue)} مورد عقب‌افتاده.`}
                 </p>
               </div>
-              <Button size="lg" onClick={onNewTask} className="shrink-0">
-                <Plus className="h-5 w-5" />
-                ثبت تسک جدید
-              </Button>
+              {isManager && (
+                <Button size="lg" onClick={onNewTask} className="shrink-0">
+                  <Plus className="h-5 w-5" />
+                  ثبت تسک جدید
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -114,7 +159,7 @@ export function OverviewView({ onNewTask, tasks }: Props) {
         {/* KPI grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <KpiCard
-            label="کل تسک‌ها"
+            label={isManager ? "کل تسک‌های واحد" : "تسک‌های من"}
             value={t?.all ?? 0}
             icon={<ClipboardList className="h-5 w-5" />}
             tone="slate"
@@ -139,7 +184,7 @@ export function OverviewView({ onNewTask, tasks }: Props) {
             value={(t?.overdue ?? 0) + (t?.BLOCKED ?? 0)}
             icon={<AlertTriangle className="h-5 w-5" />}
             tone="rose"
-            onClick={() => setView("bi")}
+            onClick={() => setView(isManager ? "bi" : "mytasks")}
           />
         </div>
 
@@ -151,24 +196,28 @@ export function OverviewView({ onNewTask, tasks }: Props) {
                 <div>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <AlertTriangle className="h-4 w-4 text-rose-500" />
-                    نیازمند پیگیری فوری
+                    {isManager ? "نیازمند پیگیری فوری (کل واحد)" : "تسک‌های فوری شما"}
                   </CardTitle>
                   <CardDescription>
-                    تسک‌هایی که امروز سررسید شده یا عقب‌افتاده‌اند.
+                    {isManager
+                      ? "تسک‌هایی که امروز سررسید شده یا عقب‌افتاده‌اند."
+                      : "تسک‌های شما که امروز سررسید شده یا عقب‌افتاده‌اند."}
                   </CardDescription>
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => setView("reports")}>
-                  مشاهده گزارش‌ها
-                  <ArrowLeft className="h-4 w-4" />
-                </Button>
+                {isManager && (
+                  <Button variant="ghost" size="sm" onClick={() => setView("reports")}>
+                    مشاهده گزارش‌ها
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             </CardHeader>
             <CardContent className="space-y-2">
-              {isLoading && [1, 2, 3].map((i) => <Skeleton key={i} className="h-14 rounded-md" />)}
+              {isLoading && isManager && [1, 2, 3].map((i) => <Skeleton key={i} className="h-14 rounded-md" />)}
               {!isLoading && needsFollowUp.length === 0 && (
                 <div className="text-center py-6 text-muted-foreground text-sm">
                   <CheckCircle2 className="h-8 w-8 mx-auto mb-1 text-emerald-500" />
-                  همه چیز under control است.
+                  هیچ تسک فوری وجود ندارد.
                 </div>
               )}
               {needsFollowUp.map((task) => {
@@ -206,13 +255,14 @@ export function OverviewView({ onNewTask, tasks }: Props) {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <TrendingUp className="h-4 w-4 text-primary" />
-                تحلیل موانع
+                {isManager ? "تحلیل موانع واحد" : "موانع تسک‌های شما"}
               </CardTitle>
               <CardDescription>علت عدم انجام تسک‌ها</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
-              {data?.obstacles.map((o) => {
-                const total = data.obstacles.reduce((a, b) => a + b.value, 0);
+              {(isManager ? data?.obstacles : localObstacles)?.map((o) => {
+                const list = isManager ? data?.obstacles : localObstacles;
+                const total = (list ?? []).reduce((a, b) => a + b.value, 0);
                 const pct = total > 0 ? (o.value / total) * 100 : 0;
                 return (
                   <div key={o.key}>
@@ -229,80 +279,87 @@ export function OverviewView({ onNewTask, tasks }: Props) {
                   </div>
                 );
               })}
+              {((isManager ? data?.obstacles : localObstacles) ?? []).length === 0 && (
+                <p className="text-xs text-muted-foreground text-center py-4">
+                  مانعی ثبت نشده است.
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Department summary */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Users className="h-4 w-4 text-primary" />
-                  عملکرد به تفکیک بخش
-                </CardTitle>
-                <CardDescription>
-                  وضعیت کلی ۴ زیرمجموعه واحد برنامه‌ریزی
-                </CardDescription>
+        {/* Department summary — manager only */}
+        {isManager && data?.deptSummary && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Users className="h-4 w-4 text-primary" />
+                    عملکرد به تفکیک بخش
+                  </CardTitle>
+                  <CardDescription>
+                    وضعیت کلی ۴ زیرمجموعه واحد برنامه‌ریزی
+                  </CardDescription>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => setView("bi")}>
+                  داشبورد هوش تجاری
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
               </div>
-              <Button variant="ghost" size="sm" onClick={() => setView("bi")}>
-                داشبورد هوش تجاری
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {data?.deptSummary.map((d) => {
-                const donePct = d.total > 0 ? Math.round((d.done / d.total) * 100) : 0;
-                return (
-                  <div key={d.key} className="rounded-lg border p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <DepartmentBadge department={d.key} />
-                      <span className="text-xs text-muted-foreground nums-fa">
-                        {toPersianDigits(d.done)}/{toPersianDigits(d.total)}
-                      </span>
-                    </div>
-                    <div className="space-y-1.5 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">درصد انجام</span>
-                        <span className="nums-fa font-medium text-emerald-600 dark:text-emerald-400">
-                          {toPersianDigits(donePct)}٪
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {data.deptSummary.map((d) => {
+                  const donePct = d.total > 0 ? Math.round((d.done / d.total) * 100) : 0;
+                  return (
+                    <div key={d.key} className="rounded-lg border p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <DepartmentBadge department={d.key} />
+                        <span className="text-xs text-muted-foreground nums-fa">
+                          {toPersianDigits(d.done)}/{toPersianDigits(d.total)}
                         </span>
                       </div>
-                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                        <div className="h-full bg-emerald-500" style={{ width: `${donePct}%` }} />
-                      </div>
-                      <div className="flex justify-between pt-1">
-                        <span className="text-muted-foreground">عقب‌افتاده</span>
-                        <span
-                          className={cn(
-                            "nums-fa font-medium",
-                            d.overdue > 0 ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground"
-                          )}
-                        >
-                          {toPersianDigits(d.overdue)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">مسدود</span>
-                        <span
-                          className={cn(
-                            "nums-fa font-medium",
-                            d.blocked > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"
-                          )}
-                        >
-                          {toPersianDigits(d.blocked)}
-                        </span>
+                      <div className="space-y-1.5 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">درصد انجام</span>
+                          <span className="nums-fa font-medium text-emerald-600 dark:text-emerald-400">
+                            {toPersianDigits(donePct)}٪
+                          </span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                          <div className="h-full bg-emerald-500" style={{ width: `${donePct}%` }} />
+                        </div>
+                        <div className="flex justify-between pt-1">
+                          <span className="text-muted-foreground">عقب‌افتاده</span>
+                          <span
+                            className={cn(
+                              "nums-fa font-medium",
+                              d.overdue > 0 ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground"
+                            )}
+                          >
+                            {toPersianDigits(d.overdue)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">مسدود</span>
+                          <span
+                            className={cn(
+                              "nums-fa font-medium",
+                              d.blocked > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"
+                            )}
+                          >
+                            {toPersianDigits(d.blocked)}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </ScrollArea>
   );
@@ -345,5 +402,4 @@ function KpiCard({
   );
 }
 
-// helper view type usage to avoid unused import lint
 export type { ViewKey };

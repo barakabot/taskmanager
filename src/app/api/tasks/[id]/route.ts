@@ -2,13 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { serializeTask, serializeLog } from "@/lib/serialize";
 import { STATUSES, FOLLOW_UP_REASONS } from "@/lib/constants";
+import { getCurrentMember, canAccessTask } from "@/lib/auth";
 
 // PATCH /api/tasks/[id]
-// body: { status?, followUpReason?, startedAt?, doneAt? }
+// body: { status?, followUpReason? }
+// Members can only update tasks assigned to them.
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const me = await getCurrentMember();
+  if (!me) {
+    return NextResponse.json({ error: "نشست نامعتبر است." }, { status: 401 });
+  }
+
   const { id } = await params;
   const body = await req.json();
   const { status, followUpReason } = body ?? {};
@@ -16,6 +23,13 @@ export async function PATCH(
   const existing = await db.task.findUnique({ where: { id } });
   if (!existing) {
     return NextResponse.json({ error: "تسک یافت نشد." }, { status: 404 });
+  }
+
+  if (!canAccessTask(me, existing.assigneeId)) {
+    return NextResponse.json(
+      { error: "شما به این تسک دسترسی ندارید." },
+      { status: 403 }
+    );
   }
 
   const data: Record<string, unknown> = {};
@@ -43,7 +57,7 @@ export async function PATCH(
       data: {
         taskId: id,
         type: "STATUS_CHANGE",
-        message: `وضعیت به «${statusLabel}» تغییر یافت.`,
+        message: `${me.name} وضعیت را به «${statusLabel}» تغییر داد.`,
       },
     });
   }
@@ -54,7 +68,7 @@ export async function PATCH(
       data: {
         taskId: id,
         type: "END_OF_DAY_REASON",
-        message: `علت عدم انجام: ${reasonLabel}`,
+        message: `${me.name} علت عدم انجام را ثبت کرد: ${reasonLabel}`,
         reason: followUpReason,
       },
     });
@@ -73,12 +87,19 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const me = await getCurrentMember();
+  if (!me) {
+    return NextResponse.json({ error: "نشست نامعتبر است." }, { status: 401 });
+  }
   const { id } = await params;
   const task = await db.task.findUnique({
     where: { id },
     include: { assignee: true, logs: { orderBy: { createdAt: "desc" }, take: 30 } },
   });
   if (!task) return NextResponse.json({ error: "تسک یافت نشد." }, { status: 404 });
+  if (!canAccessTask(me, task.assigneeId)) {
+    return NextResponse.json({ error: "شما به این تسک دسترسی ندارید." }, { status: 403 });
+  }
   return NextResponse.json({
     task: serializeTask(task),
     logs: task.logs.map(serializeLog),
