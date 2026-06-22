@@ -145,7 +145,7 @@ export function DashboardShell() {
 
   // Fetch tasks
   const { data } = useQuery({
-    queryKey: ["tasks", "all", member?.id],
+    queryKey: ["tasks", "all"],
     queryFn: async () => {
       const r = await fetch("/api/tasks");
       if (r.status === 401) return { tasks: [] as SerializedTask[] };

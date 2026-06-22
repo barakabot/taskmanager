@@ -156,33 +156,65 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Generate next code
-    const count = await db.task.count();
-    const code = `TSK-${String(count + 1).padStart(4, "0")}`;
-
+    // Generate next code with retry on unique constraint (race-condition safe)
     const deadlineDate = new Date(deadline);
     const startDate = startTime ? new Date(startTime) : null;
 
-    const task = await db.task.create({
-      data: {
-        code,
-        title: String(title).trim(),
-        description: description ?? null,
-        groupId,
-        assigneeId,
-        priority: priority || "MEDIUM",
-        deadline: deadlineDate,
-        startTime: startDate,
-        link: link ?? null,
-        status: "PENDING",
-        source: taskSource,
-        letterNumber: taskSource === "REFERRED" ? letterNumber : null,
-        letterDate: taskSource === "REFERRED" ? letterDate : null,
-        refererId: taskSource === "REFERRED" ? refererId : null,
-        approvalStatus: taskSource === "REFERRED" ? "PENDING_APPROVAL" : null,
-      },
-      include: { assignee: true, group: true, referer: true, approver: true },
-    });
+    const MAX_RETRIES = 5;
+    let task: Awaited<ReturnType<typeof db.task.create>> | null = null;
+    let lastError: unknown = null;
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        // Use interactive transaction to read-then-write atomically
+        task = await db.$transaction(async (tx) => {
+          const lastTask = await tx.task.findFirst({
+            select: { code: true },
+            orderBy: { createdAt: "desc" },
+          });
+          let nextNum = 1;
+          if (lastTask?.code) {
+            const match = lastTask.code.match(/TSK-(\d+)/);
+            if (match) nextNum = parseInt(match[1], 10) + 1;
+          }
+          const code = `TSK-${String(nextNum).padStart(4, "0")}`;
+
+          return tx.task.create({
+            data: {
+              code,
+              title: String(title).trim(),
+              description: description ?? null,
+              groupId,
+              assigneeId,
+              priority: priority || "MEDIUM",
+              deadline: deadlineDate,
+              startTime: startDate,
+              link: link ?? null,
+              status: "PENDING",
+              source: taskSource,
+              letterNumber: taskSource === "REFERRED" ? letterNumber : null,
+              letterDate: taskSource === "REFERRED" ? letterDate : null,
+              refererId: taskSource === "REFERRED" ? refererId : null,
+              approvalStatus: taskSource === "REFERRED" ? "PENDING_APPROVAL" : null,
+            },
+            include: { assignee: true, group: true, referer: true, approver: true },
+          });
+        });
+        break; // success
+      } catch (err: unknown) {
+        // If unique constraint on code fails, retry
+        const msg = err instanceof Error ? err.message : "";
+        if (msg.includes("Unique") && attempt < MAX_RETRIES - 1) {
+          continue;
+        }
+        lastError = err;
+      }
+    }
+
+    if (!task) {
+      console.error("Task create retry failed:", lastError);
+      return NextResponse.json({ error: "خطا در تولید کد تسک. دوباره تلاش کنید." }, { status: 500 });
+    }
 
     await db.followUpLog.create({
       data: {
@@ -192,7 +224,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({ task: serializeTask(task) }, { status: 201 });
+    return NextResponse.json({ task: serializeTask(task as Parameters<typeof serializeTask>[0]) }, { status: 201 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "خطای سرور";
     console.error("Tasks POST error:", error);

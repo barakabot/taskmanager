@@ -503,6 +503,7 @@ function TaskDetailSheet({
   const dl = new Date(task.deadline);
 
   async function updateStatus(status: string) {
+    if (!task) return;
     setBusy(true);
     try {
       const res = await fetch(`/api/tasks/${task.id}`, {
@@ -530,6 +531,7 @@ function TaskDetailSheet({
   }
 
   async function setReason(reason: string) {
+    if (!task) return;
     setBusy(true);
     try {
       const res = await fetch(`/api/tasks/${task.id}`, {

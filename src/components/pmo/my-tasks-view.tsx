@@ -58,6 +58,8 @@ function TaskRow({ task, onStatusChange }: { task: SerializedTask; onStatusChang
   const today = isToday(dl);
   const pInfo = priorityByKey(task.priority);
   const sInfo = statusByKey(task.status);
+  // Pre-compute to avoid TS 5.9 correlated-narrowing bug with sInfo in JSX ternary chains
+  const statusDisplay = sInfo ? (sInfo.short || sInfo.label) : task.status;
 
   return (
     <Card
@@ -76,12 +78,12 @@ function TaskRow({ task, onStatusChange }: { task: SerializedTask; onStatusChang
               {pInfo.label}
             </span>
           )}
-          {sInfo && (
+          {sInfo ? (
             <span className={cn("inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-[10px] font-medium", statusClasses[task.status])}>
               {task.status === "DONE" ? <CheckCircle2 className="h-2.5 w-2.5" /> : task.status === "STARTED" ? <Clock className="h-2.5 w-2.5" /> : task.status === "BLOCKED" ? <Pause className="h-2.5 w-2.5" /> : <Circle className="h-2.5 w-2.5" />}
-              {sInfo.short ?? sInfo.label}
+              {statusDisplay}
             </span>
-          )}
+          ) : null}
           {overdue && (
             <span className="inline-flex items-center gap-0.5 text-[10px] text-rose-600 dark:text-rose-400 font-medium">
               <AlertTriangle className="h-2.5 w-2.5" />

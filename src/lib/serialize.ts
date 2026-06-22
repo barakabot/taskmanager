@@ -1,5 +1,6 @@
 import type { Task, Member, FollowUpLog, OrgGroup, TaskTemplate, TaskSchedule } from "@prisma/client";
 import { roleByKey, priorityByKey, statusByKey, sourceByKey, approvalStatusByKey } from "./constants";
+import type { GroupWithManager, MemberWithCount, ScheduleWithRelations, TemplateWithRelations, TaskWithRelations } from "./prisma-types";
 
 export type SerializedGroup = {
   id: string;
@@ -12,7 +13,7 @@ export type SerializedGroup = {
 };
 
 export function serializeGroup(
-  g: OrgGroup & { _count?: { members: number; taskTemplates: number; tasks: number } }
+  g: GroupWithManager
 ): SerializedGroup {
   return {
     id: g.id,
@@ -42,11 +43,7 @@ export type SerializedMember = {
 };
 
 export function serializeMember(
-  member: Member & {
-    _count?: { tasks: number };
-    group?: OrgGroup | null;
-    supervisor?: Member | null;
-  },
+  member: MemberWithCount,
   activeCount: number,
   includePassword = false
 ): SerializedMember {
@@ -79,10 +76,7 @@ export type SerializedTaskTemplate = {
 };
 
 export function serializeTaskTemplate(
-  t: TaskTemplate & {
-    _count?: { schedules: number };
-    group?: OrgGroup | null;
-  }
+  t: TemplateWithRelations
 ): SerializedTaskTemplate {
   return {
     id: t.id,
@@ -113,11 +107,7 @@ export type SerializedSchedule = {
 };
 
 export function serializeSchedule(
-  s: TaskSchedule & {
-    taskTemplate?: TaskTemplate | null;
-    assignee?: Member | null;
-    overrideAssignee?: Member | null;
-  }
+  s: ScheduleWithRelations
 ): SerializedSchedule {
   const dayLabels = ["شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه"];
   return {
@@ -171,12 +161,7 @@ export type SerializedTask = {
 };
 
 export function serializeTask(
-  task: Task & {
-    assignee?: Member | null;
-    group?: OrgGroup | null;
-    referer?: Member | null;
-    approver?: Member | null;
-  }
+  task: TaskWithRelations
 ): SerializedTask {
   return {
     id: task.id,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { serializeTask, serializeLog } from "@/lib/serialize";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth, isHttpError } from "@/lib/auth";
 
 // POST /api/tasks/[id]/approve
 // body: { action: "APPROVED" | "REJECTED" }
@@ -92,12 +92,8 @@ export async function POST(
       logs: logs.map(serializeLog),
     });
   } catch (error: unknown) {
-    if (error instanceof Error && error.status === 401) {
-      return NextResponse.json({ error: "نشست نامعتبر است." }, { status: 401 });
-    }
-    if (error instanceof Error && error.status === 403) {
-      return NextResponse.json({ error: "دسترسی غیرمجاز" }, { status: 403 });
-    }
+    if (isHttpError(error, 401)) return NextResponse.json({ error: "نشست نامعتبر است." }, { status: 401 });
+    if (isHttpError(error, 403)) return NextResponse.json({ error: "دسترسی غیرمجاز" }, { status: 403 });
     console.error("Task approve error:", error);
     return NextResponse.json({ error: "خطای سرور" }, { status: 500 });
   }

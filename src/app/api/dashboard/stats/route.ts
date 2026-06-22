@@ -1,50 +1,131 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { toJalali, toPersianDigits } from "@/lib/jalali";
-import { DEPARTMENTS } from "@/lib/constants";
-import { getCurrentMember } from "@/lib/auth";
+import { getCurrentMember, getVisibleMemberIds } from "@/lib/auth";
 
 // GET /api/dashboard/stats
-// Aggregated statistics for the BI dashboard (MANAGER ONLY):
+// Aggregated statistics for the BI dashboard:
 //  - counts by status
-//  - overdue share per department (pie)
+//  - overdue share per group (pie)
 //  - weekly done trend (bar)
-//  - delay heatmap by weekday x hour (which day/hour has most overdue)
+//  - delay heatmap by weekday x hour
 //  - obstacle analysis (blocked reasons)
 export async function GET() {
   const me = await getCurrentMember();
   if (!me) {
     return NextResponse.json({ error: "نشست نامعتبر است." }, { status: 401 });
   }
-  if (me.role !== "MANAGER") {
+
+  // SUPER_ADMIN and MANAGER can access stats
+  if (me.role !== "SUPER_ADMIN" && me.role !== "MANAGER") {
     return NextResponse.json(
-      { error: "داشبورد هوش تجاری فقط برای مدیر قابل دسترسی است." },
+      { error: "داشبورد فقط برای مدیر قابل دسترسی است." },
       { status: 403 }
     );
   }
 
-  const tasks = await db.task.findMany({ include: { assignee: true, subDepartment: true } });
+  // Role-based visibility
+  const visibleIds = await getVisibleMemberIds(me);
+
+  // Use Prisma aggregation instead of loading all tasks into memory
   const now = new Date();
   const nowMs = now.getTime();
 
-  // ---- Status counts ----
+  // ---- Status counts (single query) ----
+  const statusCountsRaw = await db.task.groupBy({
+    by: ["status"],
+    where: { assigneeId: { in: visibleIds } },
+    _count: { status: true },
+  });
   const statusCounts: Record<string, number> = {
     PENDING: 0,
     STARTED: 0,
     BLOCKED: 0,
     DONE: 0,
   };
-  for (const t of tasks) statusCounts[t.status] = (statusCounts[t.status] ?? 0) + 1;
+  for (const sc of statusCountsRaw) {
+    statusCounts[sc.status] = sc._count.status;
+  }
+  const totalTasks = Object.values(statusCounts).reduce((a, b) => a + b, 0);
 
-  // ---- Overdue per department (pie) ----
-  const overdueByDept = DEPARTMENTS.map((d) => ({
-    key: d.key,
-    label: d.label,
-    color: d.color,
-    value: tasks.filter(
-      (t) => t.department === d.key && t.status !== "DONE" && t.deadline.getTime() < nowMs
-    ).length,
+  // ---- Overdue per group (use SQL-level filtering) ----
+  const overdueTasks = await db.task.findMany({
+    where: {
+      assigneeId: { in: visibleIds },
+      status: { not: "DONE" },
+      deadline: { lt: now },
+    },
+    select: { groupId: true },
+  });
+
+  // Count overdue by group
+  const overdueByGroupMap = new Map<string, number>();
+  for (const t of overdueTasks) {
+    overdueByGroupMap.set(t.groupId, (overdueByGroupMap.get(t.groupId) ?? 0) + 1);
+  }
+
+  // Get all groups for the current user's scope
+  const groupsWhere: Record<string, unknown> = {};
+  if (me.role === "MANAGER" && me.managedGroup?.id) {
+    groupsWhere.id = me.managedGroup.id;
+  }
+  const groups = await db.orgGroup.findMany({
+    where: groupsWhere,
+    orderBy: { createdAt: "asc" },
+  });
+
+  const groupColors = [
+    "bg-blue-500", "bg-emerald-500", "bg-amber-500",
+    "bg-rose-500", "bg-violet-500", "bg-cyan-500",
+    "bg-orange-500", "bg-pink-500",
+  ];
+
+  const overdueByGroup = groups.map((g, i) => ({
+    key: g.id,
+    label: g.name,
+    color: groupColors[i % groupColors.length],
+    value: overdueByGroupMap.get(g.id) ?? 0,
   }));
+
+  // ---- Group workload summary ----
+  const groupTaskCounts = await db.task.groupBy({
+    by: ["groupId", "status"],
+    where: { assigneeId: { in: visibleIds } },
+    _count: { status: true },
+  });
+
+  const groupSummaryMap = new Map<string, { total: number; done: number; active: number; overdue: number; blocked: number }>();
+  for (const g of groups) {
+    groupSummaryMap.set(g.id, { total: 0, done: 0, active: 0, overdue: 0, blocked: 0 });
+  }
+  for (const tc of groupTaskCounts) {
+    const summary = groupSummaryMap.get(tc.groupId);
+    if (summary) {
+      summary.total += tc._count.status;
+      if (tc.status === "DONE") summary.done += tc._count.status;
+      else summary.active += tc._count.status;
+      if (tc.status === "BLOCKED") summary.blocked += tc._count.status;
+    }
+  }
+  // Add overdue counts
+  for (const t of overdueTasks) {
+    const summary = groupSummaryMap.get(t.groupId);
+    if (summary) summary.overdue++;
+  }
+
+  const deptSummary = groups.map((g, i) => {
+    const s = groupSummaryMap.get(g.id) ?? { total: 0, done: 0, active: 0, overdue: 0, blocked: 0 };
+    return {
+      key: g.id,
+      label: g.name,
+      color: groupColors[i % groupColors.length],
+      total: s.total,
+      done: s.done,
+      active: s.active,
+      overdue: s.overdue,
+      blocked: s.blocked,
+    };
+  });
 
   // ---- Weekly done trend (last 8 ISO weeks) ----
   const weekMap = new Map<string, number>();
@@ -56,8 +137,16 @@ export async function GET() {
     const key = `${year}-W${String(week).padStart(2, "0")}`;
     weekMap.set(key, 0);
   }
-  for (const t of tasks) {
-    if (t.status === "DONE" && t.doneAt) {
+  const doneTasksWeekly = await db.task.findMany({
+    where: {
+      assigneeId: { in: visibleIds },
+      status: "DONE",
+      doneAt: { not: null },
+    },
+    select: { doneAt: true },
+  });
+  for (const t of doneTasksWeekly) {
+    if (t.doneAt) {
       const year = t.doneAt.getFullYear();
       const firstJan = new Date(year, 0, 1);
       const week = Math.ceil(((t.doneAt.getTime() - firstJan.getTime()) / 86400000 + firstJan.getDay() + 1) / 7);
@@ -71,18 +160,15 @@ export async function GET() {
     value: v,
   }));
 
-  // ---- Delay heatmap: weekday (Sat..Fri = 6..5 mapped) x hour bucket ----
-  // We bucket deadline hours into: صبح (8-12), ظهر (12-14), عصر (14-18), شب (18-22)
+  // ---- Delay heatmap: weekday x hour bucket ----
   const hourBuckets = [
-    { key: "08-12", label: "۸–۱۲ صبح" },
-    { key: "12-14", label: "۱۲–۱۴ ظهر" },
-    { key: "14-18", label: "۱۴–۱۸ عصر" },
-    { key: "18-22", label: "۱۸–۲۲ شب" },
+    { key: "08-12", label: "\u06F8\u2013\u06F1\u06F2 \u0635\u0628\u062D" },
+    { key: "12-14", label: "\u06F1\u06F2\u2013\u06F1\u06F4 \u0638\u0647\u0631" },
+    { key: "14-18", label: "\u06F1\u06F4\u2013\u06F1\u06F8 \u0639\u0635\u0631" },
+    { key: "18-22", label: "\u06F1\u06F8\u2013\u06F2\u06F2 \u0634\u0628" },
   ];
-  // Persian weekday order: شنبه(6)->..->جمعه(5). We'll map JS getDay() to Persian index.
-  // JS: 0=Sun,1=Mon,...,6=Sat. Persian order starts Sat.
-  const persianWeekOrder = [6, 0, 1, 2, 3, 4, 5]; // Sat, Sun, Mon, Tue, Wed, Thu, Fri
-  const persianWeekLabels = ["شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه"];
+  const persianWeekOrder = [6, 0, 1, 2, 3, 4, 5];
+  const persianWeekLabels = ["\u0634\u0646\u0628\u0647", "\u06CC\u06A9\u0634\u0646\u0628\u0647", "\u062F\u0648\u0634\u0646\u0628\u0647", "\u0633\u0647\u200C\u0634\u0646\u0628\u0647", "\u0686\u0647\u0627\u0631\u0634\u0646\u0628\u0647", "\u067E\u0646\u062C\u0634\u0646\u0628\u0647", "\u062C\u0645\u0639\u0647"];
 
   // Initialize heatmap
   const heatmap: Record<string, Record<string, number>> = {};
@@ -91,9 +177,16 @@ export async function GET() {
     for (const b of hourBuckets) heatmap[dIdx][b.key] = 0;
   }
 
-  for (const t of tasks) {
-    if (t.status === "DONE") continue;
-    if (t.deadline.getTime() >= nowMs) continue; // not overdue
+  // Use overdue tasks already loaded (they have deadlines in DB)
+  const overdueTasksFull = await db.task.findMany({
+    where: {
+      assigneeId: { in: visibleIds },
+      status: { not: "DONE" },
+      deadline: { lt: now },
+    },
+    select: { deadline: true },
+  });
+  for (const t of overdueTasksFull) {
     const d = t.deadline;
     const dayIdx = d.getDay();
     const h = d.getHours();
@@ -115,54 +208,53 @@ export async function GET() {
   }));
 
   // ---- Obstacle analysis (blocked reasons) ----
+  const blockedTasks = await db.task.findMany({
+    where: {
+      assigneeId: { in: visibleIds },
+      status: "BLOCKED",
+      followUpReason: { not: null },
+    },
+    select: { followUpReason: true },
+  });
   const reasonMap: Record<string, number> = {};
-  for (const t of tasks) {
-    if (t.status === "BLOCKED" && t.followUpReason) {
+  for (const t of blockedTasks) {
+    if (t.followUpReason) {
       reasonMap[t.followUpReason] = (reasonMap[t.followUpReason] ?? 0) + 1;
     }
   }
   const obstacles = [
-    { key: "DEPENDENT_ON_OTHERS", label: "وابسته به شخص دیگر", value: reasonMap["DEPENDENT_ON_OTHERS"] ?? 0 },
-    { key: "LACK_OF_INFO", label: "کمبود اطلاعات", value: reasonMap["LACK_OF_INFO"] ?? 0 },
-    { key: "HIGH_WORKLOAD", label: "حجم بالای کار", value: reasonMap["HIGH_WORKLOAD"] ?? 0 },
-    { key: "TECHNICAL_ISSUE", label: "مشکل فنی", value: reasonMap["TECHNICAL_ISSUE"] ?? 0 },
-    { key: "OTHER", label: "سایر", value: reasonMap["OTHER"] ?? 0 },
+    { key: "DEPENDENT_ON_OTHERS", label: "\u0648\u0627\u0628\u0633\u062A\u0647 \u0628\u0647 \u0634\u062E\u0635 \u062F\u06CC\u06AF\u0631", value: reasonMap["DEPENDENT_ON_OTHERS"] ?? 0 },
+    { key: "LACK_OF_INFO", label: "\u06A9\u0645\u0628\u0648\u062F \u0627\u0637\u0644\u0627\u0639\u0627\u062A", value: reasonMap["LACK_OF_INFO"] ?? 0 },
+    { key: "HIGH_WORKLOAD", label: "\u062D\u062C\u0645 \u0628\u0627\u0644\u0627\u06CC \u06A9\u0627\u0631", value: reasonMap["HIGH_WORKLOAD"] ?? 0 },
+    { key: "TECHNICAL_ISSUE", label: "\u0645\u0634\u06A9\u0644 \u0641\u0646\u06CC", value: reasonMap["TECHNICAL_ISSUE"] ?? 0 },
+    { key: "OTHER", label: "\u0633\u0627\u06CC\u0631", value: reasonMap["OTHER"] ?? 0 },
   ];
-
-  // ---- Department workload summary ----
-  const deptSummary = DEPARTMENTS.map((d) => {
-    const dt = tasks.filter((t) => t.department === d.key);
-    return {
-      key: d.key,
-      label: d.label,
-      color: d.color,
-      total: dt.length,
-      done: dt.filter((t) => t.status === "DONE").length,
-      active: dt.filter((t) => t.status !== "DONE").length,
-      overdue: dt.filter((t) => t.status !== "DONE" && t.deadline.getTime() < nowMs).length,
-      blocked: dt.filter((t) => t.status === "BLOCKED").length,
-    };
-  });
 
   // ---- Today's date in Jalali ----
   const [jy, jm, jd] = toJalali(now.getFullYear(), now.getMonth() + 1, now.getDate());
   const today = `${toPersianDigits(jy)}/${toPersianDigits(String(jm).padStart(2, "0"))}/${toPersianDigits(String(jd).padStart(2, "0"))}`;
 
+  // Today's due count
+  const todayDue = await db.task.count({
+    where: {
+      assigneeId: { in: visibleIds },
+      status: { not: "DONE" },
+      deadline: {
+        gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+        lt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1),
+      },
+    },
+  });
+
   return NextResponse.json({
     today,
     totals: {
-      all: tasks.length,
+      all: totalTasks,
       ...statusCounts,
-      overdue: tasks.filter((t) => t.status !== "DONE" && t.deadline.getTime() < nowMs).length,
-      todayDue: tasks.filter(
-        (t) =>
-          t.status !== "DONE" &&
-          t.deadline.getFullYear() === now.getFullYear() &&
-          t.deadline.getMonth() === now.getMonth() &&
-          t.deadline.getDate() === now.getDate()
-      ).length,
+      overdue: overdueTasks.length,
+      todayDue,
     },
-    overdueByDept,
+    overdueByGroup,
     weeklyDone,
     hourBuckets,
     heatmapRows,

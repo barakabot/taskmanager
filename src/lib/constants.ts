@@ -65,18 +65,23 @@ export const PERSIAN_WEEK_DAYS = [
   { key: 6, label: "جمعه" },
 ] as const;
 
-export function roleByKey(key: string) {
+// Simple (non-literal) lookup types — avoids TS 5.9 correlated-narrowing bugs with as-const arrays.
+type LookupItem = { readonly key: string; readonly label: string };
+type LookupItemWithColor = LookupItem & { readonly color: string };
+type StatusLookupItem = LookupItemWithColor & { readonly short: string };
+
+export function roleByKey(key: string): LookupItemWithColor | undefined {
   return ROLES.find((r) => r.key === key);
 }
-export function priorityByKey(key: string) {
+export function priorityByKey(key: string): (LookupItemWithColor & { readonly weight: number }) | undefined {
   return PRIORITIES.find((p) => p.key === key);
 }
-export function statusByKey(key: string) {
+export function statusByKey(key: string): StatusLookupItem | undefined {
   return STATUSES.find((s) => s.key === key);
 }
-export function sourceByKey(key: string) {
+export function sourceByKey(key: string): LookupItem | undefined {
   return TASK_SOURCES.find((s) => s.key === key);
 }
-export function approvalStatusByKey(key: string) {
+export function approvalStatusByKey(key: string): LookupItemWithColor | undefined {
   return APPROVAL_STATUSES.find((a) => a.key === key);
 }

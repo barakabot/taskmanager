@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { serializeTask, serializeLog } from "@/lib/serialize";
-import { STATUSES, FOLLOW_UP_REASONS } from "@/lib/constants";
-import { getCurrentMember, requireAuth, getVisibleMemberIds, canManage } from "@/lib/auth";
+import { STATUSES, PRIORITIES, FOLLOW_UP_REASONS } from "@/lib/constants";
+import { requireAuth, getVisibleMemberIds, isHttpError } from "@/lib/auth";
 
 // GET /api/tasks/[id]
 export async function GET(
@@ -42,9 +42,8 @@ export async function GET(
       logs: task.logs.map(serializeLog),
     });
   } catch (error: unknown) {
-    if (error instanceof Error && error.status === 401) {
-      return NextResponse.json({ error: "نشست نامعتبر است." }, { status: 401 });
-    }
+    if (isHttpError(error, 401)) return NextResponse.json({ error: "نشست نامعتبر است." }, { status: 401 });
+    if (isHttpError(error, 403)) return NextResponse.json({ error: "دسترسی غیرمجاز" }, { status: 403 });
     console.error("Task GET error:", error);
     return NextResponse.json({ error: "خطای سرور" }, { status: 500 });
   }
@@ -71,9 +70,15 @@ export async function PATCH(
       link,
     } = body ?? {};
 
+    // Lean select — only fields needed for business logic (no relation joins)
     const existing = await db.task.findUnique({
       where: { id },
-      include: { assignee: true },
+      select: {
+        assigneeId: true,
+        status: true,
+        startedAt: true,
+        doneAt: true,
+      },
     });
 
     if (!existing) {
@@ -112,6 +117,8 @@ export async function PATCH(
     }
 
     // Assignee change (only MANAGER or SUPERVISOR)
+    let newAssigneeName: string | null = null;
+    let oldAssigneeName: string | null = null;
     if (assigneeId && assigneeId !== existing.assigneeId) {
       if (me.role !== "MANAGER" && me.role !== "SUPERVISOR") {
         return NextResponse.json(
@@ -119,10 +126,19 @@ export async function PATCH(
           { status: 403 }
         );
       }
-      const newAssignee = await db.member.findUnique({ where: { id: assigneeId } });
+      // Fetch both old and new assignee names in a single batch query
+      const [newAssignee, oldAssignee] = await db.member.findMany({
+        where: { id: { in: [assigneeId, existing.assigneeId] } },
+        select: { id: true, name: true },
+      }).then((members) => {
+        const byId = new Map(members.map((m) => [m.id, m.name]));
+        return [byId.get(assigneeId), byId.get(existing.assigneeId)];
+      });
       if (!newAssignee) {
         return NextResponse.json({ error: "مسئول جدید یافت نشد." }, { status: 400 });
       }
+      newAssigneeName = newAssignee;
+      oldAssigneeName = oldAssignee ?? "نامشخص";
       data.assigneeId = assigneeId;
     }
 
@@ -168,13 +184,12 @@ export async function PATCH(
     }
 
     // Log assignee change
-    if (assigneeId && assigneeId !== existing.assigneeId) {
-      const newAssignee = await db.member.findUnique({ where: { id: assigneeId } });
+    if (assigneeId && assigneeId !== existing.assigneeId && newAssigneeName) {
       await db.followUpLog.create({
         data: {
           taskId: id,
           type: "NOTE",
-          message: `${me.name} مسئول را از ${existing.assignee.name} به ${newAssignee?.name ?? "نامشخص"} تغییر داد.`,
+          message: `${me.name} مسئول را از ${oldAssigneeName} به ${newAssigneeName} تغییر داد.`,
         },
       });
     }
@@ -190,12 +205,8 @@ export async function PATCH(
       logs: logs.map(serializeLog),
     });
   } catch (error: unknown) {
-    if (error instanceof Error && error.status === 401) {
-      return NextResponse.json({ error: "نشست نامعتبر است." }, { status: 401 });
-    }
-    if (error instanceof Error && error.status === 403) {
-      return NextResponse.json({ error: "دسترسی غیرمجاز" }, { status: 403 });
-    }
+    if (isHttpError(error, 401)) return NextResponse.json({ error: "نشست نامعتبر است." }, { status: 401 });
+    if (isHttpError(error, 403)) return NextResponse.json({ error: "دسترسی غیرمجاز" }, { status: 403 });
     console.error("Task PATCH error:", error);
     return NextResponse.json({ error: "خطای سرور" }, { status: 500 });
   }
@@ -236,12 +247,8 @@ export async function DELETE(
 
     return NextResponse.json({ ok: true });
   } catch (error: unknown) {
-    if (error instanceof Error && error.status === 401) {
-      return NextResponse.json({ error: "نشست نامعتبر است." }, { status: 401 });
-    }
-    if (error instanceof Error && error.status === 403) {
-      return NextResponse.json({ error: "دسترسی غیرمجاز" }, { status: 403 });
-    }
+    if (isHttpError(error, 401)) return NextResponse.json({ error: "نشست نامعتبر است." }, { status: 401 });
+    if (isHttpError(error, 403)) return NextResponse.json({ error: "دسترسی غیرمجاز" }, { status: 403 });
     console.error("Task DELETE error:", error);
     return NextResponse.json({ error: "خطای سرور" }, { status: 500 });
   }
