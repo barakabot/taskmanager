@@ -68,7 +68,7 @@ const ALL_NAV: NavItem[] = [
   { key: "scheduler", label: "زمان‌بندی", icon: CalendarClock, desc: "زمان‌بندی و قالب‌های تسک", roles: ["MANAGER", "SUPERVISOR"] },
   { key: "referred", label: "ارجاع نامه‌ای", icon: FileText, desc: "تسک‌های ارجاعی" },
   { key: "mytasks", label: "کارهای من", icon: CheckSquare, desc: "تسک‌های شخصی من" },
-  { key: "members", label: "اعضا", icon: Users, desc: "مدیریت اعضا", roles: ["MANAGER"] },
+  { key: "members", label: "اعضا", icon: Users, desc: "مدیریت اعضا", roles: ["MANAGER", "SUPERVISOR"] },
   { key: "groups", label: "مجموعه‌ها", icon: Building2, desc: "مدیریت مجموعه‌های سازمانی", roles: ["SUPER_ADMIN"] },
   { key: "admin", label: "مدیریت سیستم", icon: Settings, desc: "تنظیمات و مدیریت سیستم", roles: ["SUPER_ADMIN"] },
 ];
@@ -474,7 +474,7 @@ export function DashboardShell() {
             )}
             {view === "referred" && <ReferredView />}
             {view === "mytasks" && <MyTasksView />}
-            {view === "members" && role === "MANAGER" && <MembersView />}
+            {view === "members" && (role === "SUPER_ADMIN" || role === "MANAGER") && <MembersView />}
             {view === "groups" && role === "SUPER_ADMIN" && <GroupsView />}
             {view === "admin" && role === "SUPER_ADMIN" && <AdminView />}
           </div>
