@@ -1,4 +1,4 @@
-// PMO Agent — Organizational Planning Unit schema
+// TaskManager — Hierarchical Organization with Task Scheduling & Letter Referral
 // Learn more: https://pris.ly/d/prisma-schema
 
 generator client {
@@ -10,53 +10,110 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ---- Team members (manager + staff across 4 departments) ----
-model Member {
-  id         String   @id @default(cuid())
-  name       String
-  handle     String   @unique // telegram handle or internal id, e.g. @ali
-  password   String   @default("1234") // demo password; resettable from admin panel
-  department String   // FANTASY | NON_FANTASY | BI | COMMISSION
-  subDepartmentId String? // optional sub-unit within the department
-  subDepartment  SubDepartment? @relation(fields: [subDepartmentId], references: [id], onDelete: SetNull)
-  role       String   @default("MEMBER") // MANAGER | MEMBER
-  avatar     String?
-  createdAt  DateTime @default(now())
-  lastLoginAt DateTime?
-  tasks      Task[]
+// ---- Organization Groups (مجموعه‌ها) ----
+// Each group has one MANAGER, can have multiple SUPERVISORs, and under each supervisor, multiple SPECIALISTs
+model OrgGroup {
+  id        String   @id @default(cuid())
+  name      String   // e.g. "تأمین فانتزی", "هوش تجاری"
+  code      String   @unique // e.g. "GRP-001"
+  managerId String?  @unique
+  manager   Member?  @relation("GroupManager", fields: [managerId], references: [id], onDelete: SetNull)
+  members   Member[]
+  taskTemplates TaskTemplate[]
+  tasks         Task[]
+  createdAt DateTime @default(now())
 }
 
-// ---- Sub-departments (sub-units within each of the 4 departments) ----
-model SubDepartment {
-  id         String   @id @default(cuid())
-  name       String
-  department String   // parent: FANTASY | NON_FANTASY | BI | COMMISSION
-  createdAt  DateTime @default(now())
-  members    Member[]
-  tasks      Task[]
+// ---- Team members with hierarchical roles ----
+// SUPER_ADMIN: sees everything, manages all groups
+// MANAGER: manages one group, sees group + subordinates
+// SUPERVISOR: under a manager, supervises specialists
+// SPECIALIST: does the actual work
+model Member {
+  id              String     @id @default(cuid())
+  name            String
+  handle          String     @unique
+  password        String     @default("1234")
+  role            String     @default("SPECIALIST") // SUPER_ADMIN | MANAGER | SUPERVISOR | SPECIALIST
+  groupId         String?
+  group           OrgGroup?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  supervisorId    String?
+  supervisor      Member?    @relation("Supervision", fields: [supervisorId], references: [id], onDelete: SetNull)
+  subordinates    Member[]   @relation("Supervision")
+  managedGroup    OrgGroup?  @relation("GroupManager")
+  avatar          String?
+  createdAt       DateTime   @default(now())
+  lastLoginAt     DateTime?
+  tasks           Task[]
+  referredTasks   Task[]     @relation("TaskReferer")
+  approvedTasks   Task[]     @relation("TaskApprover")
+  assignedSchedules TaskSchedule[]
+  overrideSchedules  TaskSchedule[] @relation("ScheduleOverride")
+}
+
+// ---- Task Templates (الگوهای تسک) ----
+// Defines reusable task names per group for scheduling
+model TaskTemplate {
+  id          String         @id @default(cuid())
+  name        String
+  description String?
+  groupId     String
+  group       OrgGroup       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  priority    String         @default("MEDIUM") // HIGH | MEDIUM | LOW
+  createdAt   DateTime       @default(now())
+  schedules   TaskSchedule[]
+}
+
+// ---- Task Schedules (زمان‌بندی تسک‌ها) ----
+// Weekly schedule: which task on which day at what time for which person
+model TaskSchedule {
+  id                 String       @id @default(cuid())
+  taskTemplateId     String
+  taskTemplate       TaskTemplate @relation(fields: [taskTemplateId], references: [id], onDelete: Cascade)
+  dayOfWeek          Int?         // 0=Saturday ... 6=Friday (Persian week)
+  specificDate       String?      // YYYY-MM-DD for one-time scheduling (overrides dayOfWeek)
+  startTime          String       // "HH:MM"
+  endTime            String       // "HH:MM"
+  assigneeId         String
+  assignee           Member       @relation(fields: [assigneeId], references: [id])
+  overrideAssigneeId String?
+  overrideAssignee   Member?      @relation("ScheduleOverride", fields: [overrideAssigneeId], references: [id], onDelete: SetNull)
+  overrideDate       String?      // YYYY-MM-DD when override applies (null = all days)
+  createdAt          DateTime     @default(now())
 }
 
 // ---- Tasks ----
+// source: MANUAL (created by manager/supervisor) | SCHEDULED (from schedule) | REFERRED (from letter)
 model Task {
-  id             String   @id @default(cuid())
-  code           String   @unique // human readable, e.g. TSK-0001
+  id             String     @id @default(cuid())
+  code           String     @unique // e.g. TSK-0001
   title          String
   description    String?
-  department     String   // FANTASY | NON_FANTASY | BI | COMMISSION
-  subDepartmentId String? // optional sub-unit
-  subDepartment  SubDepartment? @relation(fields: [subDepartmentId], references: [id], onDelete: SetNull)
+  groupId        String
+  group          OrgGroup   @relation(fields: [groupId], references: [id])
+  source         String     @default("MANUAL") // MANUAL | SCHEDULED | REFERRED
   assigneeId     String
-  assignee       Member   @relation(fields: [assigneeId], references: [id])
-  priority       String   @default("MEDIUM") // HIGH | MEDIUM | LOW
-  status         String   @default("PENDING") // PENDING | STARTED | BLOCKED | DONE
-  startTime      DateTime? // planned start (when work should begin)
-  deadline       DateTime  // planned completion / due date
+  assignee       Member     @relation(fields: [assigneeId], references: [id])
+  priority       String     @default("MEDIUM") // HIGH | MEDIUM | LOW
+  status         String     @default("PENDING") // PENDING | STARTED | BLOCKED | DONE
+  // Letter referral fields
+  letterNumber   String?
+  letterDate     String?    // YYYY-MM-DD
+  refererId      String?
+  referer        Member?    @relation("TaskReferer", fields: [refererId], references: [id], onDelete: SetNull)
+  approvalStatus String?    // PENDING_APPROVAL | APPROVED | REJECTED (null = non-referred)
+  approverId     String?
+  approver       Member?    @relation("TaskApprover", fields: [approverId], references: [id], onDelete: SetNull)
+  approvedAt     DateTime?
+  // Timing
+  startTime      DateTime?
+  deadline       DateTime
   link           String?
-  followUpReason String?  // DEPENDENT_ON_OTHERS | LACK_OF_INFO | HIGH_WORKLOAD | TECHNICAL_ISSUE | OTHER
-  startedAt      DateTime? // actual start (set when status -> STARTED)
-  doneAt         DateTime? // actual completion (set when status -> DONE)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  followUpReason String?
+  startedAt      DateTime?
+  doneAt         DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
   logs           FollowUpLog[]
 }
 
@@ -65,18 +122,8 @@ model FollowUpLog {
   id        String   @id @default(cuid())
   taskId    String
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  type      String   // STATUS_CHANGE | MORNING_BRIEF | OVERDUE_NUDGE | END_OF_DAY_REASON | NOTE
+  type      String   // STATUS_CHANGE | APPROVAL | NOTE
   message   String
   reason    String?
   createdAt DateTime @default(now())
-}
-
-// ---- Daily reports (morning briefings + evening manager reports) ----
-model DailyReport {
-  id        String   @id @default(cuid())
-  date      String   @unique // YYYY-MM-DD (Asia/Tehran)
-  morning   String?  // JSON-serialized morning briefing payload
-  evening   String?  // JSON-serialized evening manager report payload
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }

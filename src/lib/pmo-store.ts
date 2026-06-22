@@ -6,49 +6,41 @@ export type ViewKey =
   | "overview"
   | "kanban"
   | "list"
-  | "calendar"
-  | "bi"
-  | "reports"
+  | "scheduler"
+  | "referred"
   | "mytasks"
   | "members"
+  | "groups"
   | "admin";
 
 export type CurrentMember = {
   id: string;
   name: string;
   handle: string;
-  department: string;
-  role: "MANAGER" | "MEMBER";
+  role: string;
+  groupId: string | null;
+  groupName: string | null;
+  supervisorId: string | null;
 };
 
-interface PMOState {
-  // Auth
+interface TMState {
   member: CurrentMember | null;
   authLoading: boolean;
   setMember: (m: CurrentMember | null) => void;
   setAuthLoading: (v: boolean) => void;
-  isManager: boolean;
-
-  // Navigation
   view: ViewKey;
   setView: (v: ViewKey) => void;
-
-  // Task refresh signal
   taskVersion: number;
   bumpTaskVersion: () => void;
 }
 
-export const usePMOStore = create<PMOState>((set) => ({
+export const useTMStore = create<TMState>((set) => ({
   member: null,
   authLoading: true,
-  setMember: (member) =>
-    set({ member, isManager: member?.role === "MANAGER" }),
+  setMember: (member) => set({ member }),
   setAuthLoading: (authLoading) => set({ authLoading }),
-  isManager: false,
-
   view: "overview",
   setView: (view) => set({ view }),
-
   taskVersion: 0,
   bumpTaskVersion: () => set((s) => ({ taskVersion: s.taskVersion + 1 })),
 }));

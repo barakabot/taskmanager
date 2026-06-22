@@ -1,279 +1,468 @@
 "use client";
 
 import * as React from "react";
-import {
-  DndContext,
-  DragOverlay,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  useDroppable,
-  useDraggable,
-  type DragEndEvent,
-  type DragStartEvent,
-} from "@dnd-kit/core";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { TaskCard } from "./task-card";
-import { TaskDetailSheet } from "./task-detail-sheet";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  KANBAN_ORDER,
+  FOLLOW_UP_REASONS,
+  priorityByKey,
+  statusByKey,
+} from "@/lib/constants";
 import type { SerializedTask } from "@/lib/serialize";
-import { STATUSES, type StatusKey, KANBAN_ORDER, statusByKey } from "@/lib/constants";
-import { toPersianDigits } from "@/lib/jalali";
+import { toPersianDigits, isOverdue } from "@/lib/jalali";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Plus, Inbox } from "lucide-react";
+import {
+  CheckCircle2,
+  AlertTriangle,
+  PlayCircle,
+  FileText,
+  Filter,
+} from "lucide-react";
 
-interface Props {
-  filters: { department: string | null; priority: string | null; overdueOnly: boolean };
-  onNewTask: () => void;
+/* ------------------------------------------------------------------ */
+/*  Badge helpers                                                      */
+/* ------------------------------------------------------------------ */
+
+const PRIORITY_STYLES: Record<string, string> = {
+  HIGH: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800",
+  MEDIUM: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800",
+  LOW: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-700",
+};
+
+const COLUMN_HEADER_STYLES: Record<string, string> = {
+  PENDING: "bg-slate-100 text-slate-600 dark:bg-slate-800/60 dark:text-slate-300",
+  STARTED: "bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300",
+  BLOCKED: "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
+  DONE: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
+};
+
+const COLUMN_DOT_STYLES: Record<string, string> = {
+  PENDING: "bg-slate-500",
+  STARTED: "bg-sky-500",
+  BLOCKED: "bg-rose-500",
+  DONE: "bg-emerald-500",
+};
+
+function PriorityBadge({ priority }: { priority: string }) {
+  const p = priorityByKey(priority);
+  if (!p) return null;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium",
+        PRIORITY_STYLES[p.key]
+      )}
+    >
+      {p.label}
+    </span>
+  );
 }
 
-export function KanbanView({ filters, onNewTask }: Props) {
-  const queryClient = useQueryClient();
-  const [activeId, setActiveId] = React.useState<string | null>(null);
-  const [selected, setSelected] = React.useState<SerializedTask | null>(null);
-  const [sheetOpen, setSheetOpen] = React.useState(false);
+/* ------------------------------------------------------------------ */
+/*  Next status helper                                                  */
+/* ------------------------------------------------------------------ */
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+function getNextStatus(current: string): string | null {
+  if (current === "PENDING") return "STARTED";
+  if (current === "STARTED") return "DONE";
+  return null;
+}
+
+/* ------------------------------------------------------------------ */
+/*  KanbanCard                                                         */
+/* ------------------------------------------------------------------ */
+
+function KanbanCard({
+  task,
+  onUpdate,
+  onBlocked,
+}: {
+  task: SerializedTask;
+  onUpdate: (taskId: string, status: string) => void;
+  onBlocked: (taskId: string) => void;
+}) {
+  const overdue = isOverdue(new Date(task.deadline), task.status);
+  const nextStatus = getNextStatus(task.status);
+
+  return (
+    <Card
+      className={cn(
+        "group p-3 transition-all hover:shadow-md",
+        overdue && "border-r-4 border-r-rose-500"
+      )}
+    >
+      <div className="space-y-2.5">
+        {/* Code + referred indicator */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="font-mono text-[10px] text-muted-foreground">
+            {task.code}
+          </span>
+          {task.source === "REFERRED" && task.letterNumber && (
+            <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-600 dark:text-amber-400">
+              <FileText className="h-3 w-3" />
+              {task.letterNumber}
+            </span>
+          )}
+          {task.approvalStatus === "PENDING_APPROVAL" && (
+            <Badge className="bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 text-[10px] px-1.5 py-0 h-5">
+              در انتظار تأیید
+            </Badge>
+          )}
+        </div>
+
+        {/* Title */}
+        <h4 className="text-sm font-medium leading-6 line-clamp-2">
+          {task.title}
+        </h4>
+
+        {/* Priority + Group */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <PriorityBadge priority={task.priority} />
+          {task.groupName && (
+            <span className="text-[10px] text-muted-foreground bg-muted rounded-md px-1.5 py-0.5">
+              {task.groupName}
+            </span>
+          )}
+        </div>
+
+        {/* Assignee */}
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-[10px] font-bold shrink-0">
+            {task.assigneeName.charAt(0)}
+          </span>
+          <span className="truncate">{task.assigneeName}</span>
+        </div>
+
+        {/* Deadline */}
+        {overdue && (
+          <div className="flex items-center gap-1 text-[10px] text-rose-600 dark:text-rose-400 font-medium">
+            <AlertTriangle className="h-3 w-3" />
+            عقب‌افتاده
+          </div>
+        )}
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-1.5 pt-1 border-t">
+          {task.status !== "DONE" && task.status !== "BLOCKED" && nextStatus && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1 h-7 text-[11px] gap-1"
+              onClick={() => onUpdate(task.id, nextStatus)}
+            >
+              {nextStatus === "STARTED" && (
+                <PlayCircle className="h-3 w-3 text-sky-500" />
+              )}
+              {nextStatus === "DONE" && (
+                <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+              )}
+              {nextStatus === "STARTED" ? "شروع" : "انجام شد"}
+            </Button>
+          )}
+          {task.status !== "BLOCKED" && task.status !== "DONE" && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-[11px] gap-1 border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-400 dark:hover:bg-rose-950/30"
+              onClick={() => onBlocked(task.id)}
+            >
+              <AlertTriangle className="h-3 w-3" />
+              <span className="hidden sm:inline">مسدود</span>
+            </Button>
+          )}
+          {task.status === "BLOCKED" && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1 h-7 text-[11px] gap-1"
+              onClick={() => onUpdate(task.id, "STARTED")}
+            >
+              <PlayCircle className="h-3 w-3 text-sky-500" />
+              از سر گیری
+            </Button>
+          )}
+        </div>
+      </div>
+    </Card>
   );
+}
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["tasks", "kanban"],
+/* ------------------------------------------------------------------ */
+/*  Blocked Reason Dialog                                              */
+/* ------------------------------------------------------------------ */
+
+function BlockedReasonDialog({
+  open,
+  onOpenChange,
+  onSelect,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onSelect: (taskId: string, reason: string) => void;
+}) {
+  const [taskId, setTaskId] = React.useState<string>("");
+  const busy = React.useRef(false);
+
+  function handleOpen(v: boolean) {
+    onOpenChange(v);
+    if (!v) setTaskId("");
+  }
+
+  function handleSelect(reason: string) {
+    if (busy.current) return;
+    busy.current = true;
+    onSelect(taskId, reason);
+    busy.current = false;
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpen}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="text-right">علت مسدود شدن</DialogTitle>
+          <DialogDescription className="text-right">
+            علت عدم انجام تسک را انتخاب کنید.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2 py-2">
+          {FOLLOW_UP_REASONS.map((r) => (
+            <Button
+              key={r.key}
+              variant="outline"
+              size="sm"
+              className="justify-start h-9 text-sm"
+              onClick={() => handleSelect(r.key)}
+            >
+              {r.label}
+            </Button>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  KanbanView                                                         */
+/* ------------------------------------------------------------------ */
+
+export function KanbanView() {
+  const queryClient = useQueryClient();
+  const [groupFilter, setGroupFilter] = React.useState<string>("all");
+  const [blockedTaskId, setBlockedTaskId] = React.useState<string>("");
+  const [blockedDialogOpen, setBlockedDialogOpen] = React.useState(false);
+
+  // Fetch tasks
+  const { data: tasksData, isLoading } = useQuery({
+    queryKey: ["tasks", "all"],
     queryFn: async () => {
       const r = await fetch("/api/tasks");
+      if (!r.ok) return { tasks: [] as SerializedTask[] };
       return (await r.json()) as { tasks: SerializedTask[] };
     },
   });
+  const tasks = tasksData?.tasks ?? [];
 
-  const tasks = (data?.tasks ?? []).filter((t) => {
-    if (filters.department && t.department !== filters.department) return false;
-    if (filters.priority && t.priority !== filters.priority) return false;
-    if (filters.overdueOnly && !(t.status !== "DONE" && new Date(t.deadline).getTime() < Date.now()))
-      return false;
-    return true;
-  });
-
-  const columns = KANBAN_ORDER.map((status) => ({
-    status,
-    label: statusByKey(status)?.label ?? status,
-    tasks: tasks.filter((t) => t.status === status),
-  }));
-
-  function onDragStart(e: DragStartEvent) {
-    setActiveId(String(e.active.id));
-  }
-
-  async function onDragEnd(e: DragEndEvent) {
-    setActiveId(null);
-    const { active, over } = e;
-    if (!over) return;
-    const taskId = String(active.id);
-    const newStatus = String(over.id) as StatusKey;
-    if (!STATUSES.some((s) => s.key === newStatus)) return;
-
-    const task = tasks.find((t) => t.id === taskId);
-    if (!task || task.status === newStatus) return;
-
-    // Optimistic update
-    queryClient.setQueryData<{ tasks: SerializedTask[] }>(["tasks", "kanban"], (old) => {
-      if (!old) return old;
-      return {
-        tasks: old.tasks.map((t) =>
-          t.id === taskId ? { ...t, status: newStatus } : t
-        ),
-      };
+  // Derive unique groups
+  const uniqueGroups = React.useMemo(() => {
+    const set = new Set<string>();
+    tasks.forEach((t) => {
+      if (t.groupName) set.add(t.groupName);
     });
+    return Array.from(set).sort();
+  }, [tasks]);
 
-    try {
+  // Filter tasks
+  const filteredTasks = React.useMemo(() => {
+    if (groupFilter === "all") return tasks;
+    return tasks.filter((t) => t.groupName === groupFilter);
+  }, [tasks, groupFilter]);
+
+  // Mutation for status change
+  const statusMutation = useMutation({
+    mutationFn: async ({
+      taskId,
+      status,
+      followUpReason,
+    }: {
+      taskId: string;
+      status: string;
+      followUpReason?: string;
+    }) => {
+      const body: Record<string, string> = { status };
+      if (followUpReason) body.followUpReason = followUpReason;
       const res = await fetch(`/api/tasks/${taskId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error();
-      toast.success(`تسک به ستون «${statusByKey(newStatus)?.label}» منتقل شد.`);
+      if (!res.ok) throw new Error("خطا");
+      return res.json();
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
-      queryClient.invalidateQueries({ queryKey: ["members"] });
-    } catch {
-      toast.error("انتقال تسک ناموفق بود.");
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-    }
-  }
-
-  const activeTask = tasks.find((t) => t.id === activeId) ?? null;
-
-  function openTask(task: SerializedTask) {
-    setSelected(task);
-    setSheetOpen(true);
-  }
-
-  return (
-    <div className="h-full flex flex-col">
-      <DndContext
-        sensors={sensors}
-        collisionDetection={({ active, droppableContainers }) => {
-          // Find the droppable column under the pointer
-          const rect = active.rect.current.translated;
-          if (!rect) return { droppableContainers: [] };
-          const intersections = droppableContainers
-            .filter((c) => c.id !== active.id)
-            .map((c) => {
-              const r = c.rect.current;
-              if (!r) return { id: c.id, area: 0 };
-              const left = Math.max(rect.left, r.left);
-              const right = Math.min(rect.right, r.right);
-              const top = Math.max(rect.top, r.top);
-              const bottom = Math.min(rect.bottom, r.bottom);
-              const area = Math.max(0, right - left) * Math.max(0, bottom - top);
-              return { id: c.id, area };
-            })
-            .sort((a, b) => b.area - a.area);
-          return {
-            droppableContainers: intersections
-              .filter((i) => i.area > 0)
-              .map((i) => ({ id: i.id })),
-          };
-        }}
-        onDragStart={onDragStart}
-        onDragEnd={onDragEnd}
-      >
-        <ScrollArea className="flex-1 scroll-area-pmo">
-          <div className="flex gap-4 min-w-max pb-4 px-1">
-            {columns.map((col) => (
-              <KanbanColumn
-                key={col.status}
-                status={col.status}
-                label={col.label}
-                tasks={col.tasks}
-                onOpen={openTask}
-                onNewTask={col.status === "PENDING" ? onNewTask : undefined}
-                isLoading={isLoading}
-              />
-            ))}
-          </div>
-          <ScrollBar orientation="horizontal" />
-        </ScrollArea>
-
-        <DragOverlay>
-          {activeTask ? (
-            <div className="w-72 rotate-2 opacity-90">
-              <TaskCard task={activeTask} isDragging />
-            </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
-
-      <TaskDetailSheet
-        task={selected}
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-        onUpdated={() => {
-          queryClient.invalidateQueries({ queryKey: ["tasks"] });
-          queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
-          queryClient.invalidateQueries({ queryKey: ["members"] });
-        }}
-      />
-    </div>
-  );
-}
-
-function KanbanColumn({
-  status,
-  label,
-  tasks,
-  onOpen,
-  onNewTask,
-  isLoading,
-}: {
-  status: StatusKey;
-  label: string;
-  tasks: SerializedTask[];
-  onOpen: (t: SerializedTask) => void;
-  onNewTask?: () => void;
-  isLoading?: boolean;
-}) {
-  const { setNodeRef, isOver } = useDroppable({ id: status });
-
-  return (
-    <div className="w-72 shrink-0 flex flex-col">
-      <div className="flex items-center justify-between mb-2 px-1">
-        <div className="flex items-center gap-2">
-          <span
-            className={cn(
-              "h-2 w-2 rounded-full",
-              status === "PENDING" && "bg-slate-400",
-              status === "STARTED" && "bg-sky-500",
-              status === "BLOCKED" && "bg-rose-500",
-              status === "DONE" && "bg-emerald-500"
-            )}
-          />
-          <h3 className="font-semibold text-sm">{label}</h3>
-          <span className="text-xs text-muted-foreground nums-fa bg-muted px-1.5 py-0.5 rounded">
-            {toPersianDigits(tasks.length)}
-          </span>
-        </div>
-        {onNewTask && (
-          <button
-            onClick={onNewTask}
-            className="text-muted-foreground hover:text-primary transition-colors"
-            title="افزودن تسک"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-      <div
-        ref={setNodeRef}
-        className={cn(
-          "flex-1 min-h-[200px] rounded-xl border border-dashed p-2 space-y-2 transition-colors",
-          isOver
-            ? "border-primary bg-primary/5"
-            : "border-border bg-muted/30"
-        )}
-      >
-        {isLoading && (
-          <div className="space-y-2">
-            {[1, 2].map((i) => (
-              <div key={i} className="h-24 rounded-lg bg-muted animate-pulse" />
-            ))}
-          </div>
-        )}
-        {!isLoading && tasks.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-32 text-muted-foreground/60">
-            <Inbox className="h-6 w-4 mb-1" />
-            <span className="text-xs">خالی</span>
-          </div>
-        )}
-        {tasks.map((task) => (
-          <DraggableTask key={task.id} task={task} onOpen={() => onOpen(task)} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function DraggableTask({
-  task,
-  onOpen,
-}: {
-  task: SerializedTask;
-  onOpen: () => void;
-}) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: task.id,
+      toast.success("وضعیت تسک به‌روزرسانی شد.");
+    },
+    onError: () => {
+      toast.error("به‌روزرسانی وضعیت ناموفق بود.");
+    },
   });
+
+  function handleUpdateStatus(taskId: string, status: string) {
+    statusMutation.mutate({ taskId, status });
+  }
+
+  function handleBlocked(taskId: string) {
+    setBlockedTaskId(taskId);
+    setBlockedDialogOpen(true);
+  }
+
+  function handleBlockedReason(taskId: string, reason: string) {
+    statusMutation.mutate(
+      { taskId, status: "BLOCKED", followUpReason: reason },
+      {
+        onSuccess: () => {
+          setBlockedDialogOpen(false);
+        },
+      }
+    );
+  }
+
+  // Group tasks by column status
+  const columns = React.useMemo(() => {
+    const colMap = new Map<string, SerializedTask[]>();
+    KANBAN_ORDER.forEach((s) => colMap.set(s, []));
+    filteredTasks.forEach((t) => {
+      const list = colMap.get(t.status);
+      if (list) list.push(t);
+    });
+    return colMap;
+  }, [filteredTasks]);
+
   return (
-    <div ref={setNodeRef} {...attributes} className={isDragging ? "kanban-dragging" : ""}>
-      <div {...listeners} className={isDragging ? "cursor-grabbing" : "cursor-grab"}>
-        <TaskCard
-          task={task}
-          onClick={onOpen}
-          compact
-          isDragging={isDragging}
-        />
+    <div className="flex flex-col h-full gap-3">
+      {/* ---- Filter Bar ---- */}
+      <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Filter className="h-3.5 w-3.5" />
+          فیلتر مجموعه:
+        </div>
+        <Select value={groupFilter} onValueChange={setGroupFilter}>
+          <SelectTrigger className="w-auto min-w-[140px] h-8 text-xs">
+            <SelectValue placeholder="همه مجموعه‌ها" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">همه مجموعه‌ها</SelectItem>
+            {uniqueGroups.map((g) => (
+              <SelectItem key={g} value={g}>
+                {g}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="mr-auto text-xs text-muted-foreground">
+          {toPersianDigits(filteredTasks.length)} تسک
+        </div>
       </div>
+
+      {/* ---- Columns ---- */}
+      {isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 flex-1">
+          {KANBAN_ORDER.map((s) => (
+            <div key={s} className="space-y-3">
+              <Skeleton className="h-8 w-full rounded-lg" />
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-40 w-full rounded-lg" />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 flex-1 min-h-0">
+          {KANBAN_ORDER.map((statusKey) => {
+            const statusInfo = statusByKey(statusKey);
+            const columnTasks = columns.get(statusKey) ?? [];
+            return (
+              <div
+                key={statusKey}
+                className="flex flex-col min-h-0 rounded-xl border bg-muted/30 overflow-hidden"
+              >
+                {/* Column header */}
+                <div
+                  className={cn(
+                    "shrink-0 px-3 py-2 flex items-center gap-2",
+                    COLUMN_HEADER_STYLES[statusKey]
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "h-2 w-2 rounded-full",
+                      COLUMN_DOT_STYLES[statusKey]
+                    )}
+                  />
+                  <span className="text-xs font-semibold flex-1">
+                    {statusInfo?.label}
+                  </span>
+                  <Badge
+                    variant="secondary"
+                    className="text-[10px] h-5 px-1.5"
+                  >
+                    {toPersianDigits(columnTasks.length)}
+                  </Badge>
+                </div>
+
+                {/* Cards */}
+                <ScrollArea className="flex-1">
+                  <div className="p-2 space-y-2">
+                    {columnTasks.length === 0 && (
+                      <p className="text-xs text-muted-foreground text-center py-6">
+                        تسکی وجود ندارد
+                      </p>
+                    )}
+                    {columnTasks.map((task) => (
+                      <KanbanCard
+                        key={task.id}
+                        task={task}
+                        onUpdate={handleUpdateStatus}
+                        onBlocked={handleBlocked}
+                      />
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Blocked reason dialog */}
+      <BlockedReasonDialog
+        open={blockedDialogOpen}
+        onOpenChange={setBlockedDialogOpen}
+        onSelect={handleBlockedReason}
+      />
     </div>
   );
 }

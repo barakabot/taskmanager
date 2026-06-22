@@ -4,10 +4,16 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { usePMOStore } from "@/lib/pmo-store";
+import { useTMStore, type ViewKey } from "@/lib/pmo-store";
 import {
   ShieldCheck,
   LogIn,
@@ -15,20 +21,51 @@ import {
   KeyRound,
   Eye,
   EyeOff,
-  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const DEMO_ACCOUNTS = [
-  { label: "مدیر", handle: "@manager", password: "admin", role: "MANAGER" },
-  { label: "علی محمدی (فانتزی)", handle: "@ali", password: "1234", role: "MEMBER" },
-  { label: "حسین احمدی (غیرفانتزی)", handle: "@hossein", password: "1234", role: "MEMBER" },
-  { label: "رضا قاسمی (BI)", handle: "@reza", password: "1234", role: "MEMBER" },
+  {
+    label: "مدیر کل",
+    handle: "@admin",
+    password: "admin",
+    role: "SUPER_ADMIN" as const,
+    color: "border-rose-200 bg-rose-50 hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-950/30 dark:hover:bg-rose-950/50",
+  },
+  {
+    label: "مدیر فانتزی",
+    handle: "@mgr1",
+    password: "admin",
+    role: "MANAGER" as const,
+    color: "border-amber-200 bg-amber-50 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:hover:bg-amber-950/50",
+  },
+  {
+    label: "سرپرست",
+    handle: "@sup1",
+    password: "1234",
+    role: "SUPERVISOR" as const,
+    color: "border-sky-200 bg-sky-50 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/30 dark:hover:bg-sky-950/50",
+  },
+  {
+    label: "کارشناس",
+    handle: "@ali",
+    password: "1234",
+    role: "SPECIALIST" as const,
+    color: "hover:bg-muted/50",
+  },
 ];
 
+const ROLE_VIEW_MAP: Record<string, ViewKey> = {
+  SUPER_ADMIN: "admin",
+  MANAGER: "overview",
+  SUPERVISOR: "overview",
+  SPECIALIST: "mytasks",
+};
+
 export function LoginScreen() {
-  const setMember = usePMOStore((s) => s.setMember);
-  const setAuthLoading = usePMOStore((s) => s.setAuthLoading);
+  const setMember = useTMStore((s) => s.setMember);
+  const setAuthLoading = useTMStore((s) => s.setAuthLoading);
+  const setView = useTMStore((s) => s.setView);
   const [handle, setHandle] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [showPwd, setShowPwd] = React.useState(false);
@@ -45,16 +82,21 @@ export function LoginScreen() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ handle: handle.trim(), password: password.trim() }),
+        body: JSON.stringify({
+          handle: handle.trim(),
+          password: password.trim(),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
         toast.error(data.error ?? "ورود ناموفق بود.");
         return;
       }
-      setMember(data.member);
+      const m = data.member;
+      setMember(m);
+      setView(ROLE_VIEW_MAP[m.role] ?? "overview");
       setAuthLoading(false);
-      toast.success(`خوش آمدید، ${data.member.name}!`);
+      toast.success(`خوش آمدید، ${m.name}!`);
     } catch {
       toast.error("خطا در ارتباط با سرور.");
     } finally {
@@ -76,9 +118,9 @@ export function LoginScreen() {
           <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground text-2xl font-bold mb-3 shadow-lg">
             پ
           </div>
-          <h1 className="text-xl font-bold">PMO Agent</h1>
+          <h1 className="text-xl font-bold">سیستم مدیریت تسک</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            واحد برنامه‌ریزی سازمان — ورود به سامانه
+            ورود به سامانه مدیریت تسک‌های سازمانی
           </p>
         </div>
 
@@ -103,7 +145,7 @@ export function LoginScreen() {
                   id="handle"
                   value={handle}
                   onChange={(e) => setHandle(e.target.value)}
-                  placeholder="@manager"
+                  placeholder="@admin"
                   dir="ltr"
                   className="text-left"
                   autoComplete="username"
@@ -131,7 +173,11 @@ export function LoginScreen() {
                     onClick={() => setShowPwd((v) => !v)}
                     className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   >
-                    {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showPwd ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
                   </button>
                 </div>
               </div>
@@ -159,9 +205,7 @@ export function LoginScreen() {
                   disabled={busy}
                   className={cn(
                     "rounded-lg border p-2 text-right text-xs transition-all hover:shadow-sm",
-                    a.role === "MANAGER"
-                      ? "border-primary/40 bg-primary/5 hover:bg-primary/10"
-                      : "hover:bg-muted/50"
+                    a.color
                   )}
                 >
                   <div className="font-medium">{a.label}</div>
@@ -171,12 +215,6 @@ export function LoginScreen() {
                 </button>
               ))}
             </div>
-
-            <p className="text-[11px] text-muted-foreground mt-4 flex items-start gap-1.5">
-              <Sparkles className="h-3 w-3 mt-0.5 shrink-0" />
-              هر کاربر فقط تسک‌های خودش را می‌بیند. مدیر به همه تسک‌ها، گزارش‌ها و پنل
-              مدیریت دسترسی دارد.
-            </p>
           </CardContent>
         </Card>
       </div>

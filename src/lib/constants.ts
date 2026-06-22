@@ -1,45 +1,13 @@
-// Central domain constants for the PMO Organizational Planning unit.
+// Central domain constants for the Hierarchical Task Manager.
 
-export const DEPARTMENTS = [
-  {
-    key: "MANAGEMENT",
-    label: "مدیریت",
-    short: "مدیریت",
-    color: "slate",
-  },
-  {
-    key: "SUPERVISOR",
-    label: "سرپرستی",
-    short: "سرپرستی",
-    color: "yellow",
-  },
-  {
-    key: "FANTASY",
-    label: "تأمین فانتزی",
-    short: "فانتزی",
-    color: "violet",
-  },
-  {
-    key: "NON_FANTASY",
-    label: "تأمین غیر فانتزی",
-    short: "غیرفانتزی",
-    color: "emerald",
-  },
-  {
-    key: "BI",
-    label: "هوش تجاری (BI)",
-    short: "BI",
-    color: "amber",
-  },
-  {
-    key: "COMMISSION",
-    label: "پورسانت و گزارش‌ها",
-    short: "پورسانت",
-    color: "rose",
-  },
+export const ROLES = [
+  { key: "SUPER_ADMIN", label: "مدیر کل", color: "rose" },
+  { key: "MANAGER", label: "مدیر مجموعه", color: "amber" },
+  { key: "SUPERVISOR", label: "سرپرست", color: "sky" },
+  { key: "SPECIALIST", label: "کارشناس", color: "slate" },
 ] as const;
 
-export type DepartmentKey = (typeof DEPARTMENTS)[number]["key"];
+export type RoleKey = (typeof ROLES)[number]["key"];
 
 export const PRIORITIES = [
   { key: "HIGH", label: "بالا", color: "rose", weight: 3 },
@@ -58,41 +26,47 @@ export const STATUSES = [
 
 export type StatusKey = (typeof STATUSES)[number]["key"];
 
-// Kanban column order
+export const TASK_SOURCES = [
+  { key: "MANUAL", label: "دستی" },
+  { key: "SCHEDULED", label: "زمان‌بندی شده" },
+  { key: "REFERRED", label: "ارجاع نامه‌ای" },
+] as const;
+
+export type TaskSourceKey = (typeof TASK_SOURCES)[number]["key"];
+
+export const APPROVAL_STATUSES = [
+  { key: "PENDING_APPROVAL", label: "در انتظار تأیید", color: "amber" },
+  { key: "APPROVED", label: "تأیید شده", color: "emerald" },
+  { key: "REJECTED", label: "رد شده", color: "rose" },
+] as const;
+
+export type ApprovalStatusKey = (typeof APPROVAL_STATUSES)[number]["key"];
+
 export const KANBAN_ORDER: StatusKey[] = ["PENDING", "STARTED", "BLOCKED", "DONE"];
 
 export const FOLLOW_UP_REASONS = [
-  {
-    key: "DEPENDENT_ON_OTHERS",
-    label: "وابسته به شخص دیگر",
-    icon: "users",
-  },
-  {
-    key: "LACK_OF_INFO",
-    label: "کمبود اطلاعات",
-    icon: "info",
-  },
-  {
-    key: "HIGH_WORKLOAD",
-    label: "حجم بالای کار",
-    icon: "layers",
-  },
-  {
-    key: "TECHNICAL_ISSUE",
-    label: "مشکل فنی",
-    icon: "wrench",
-  },
-  {
-    key: "OTHER",
-    label: "سایر",
-    icon: "more-horizontal",
-  },
+  { key: "DEPENDENT_ON_OTHERS", label: "وابسته به شخص دیگر", icon: "users" },
+  { key: "LACK_OF_INFO", label: "کمبود اطلاعات", icon: "info" },
+  { key: "HIGH_WORKLOAD", label: "حجم بالای کار", icon: "layers" },
+  { key: "TECHNICAL_ISSUE", label: "مشکل فنی", icon: "wrench" },
+  { key: "OTHER", label: "سایر", icon: "more-horizontal" },
 ] as const;
 
 export type FollowUpReasonKey = (typeof FOLLOW_UP_REASONS)[number]["key"];
 
-export function departmentByKey(key: string) {
-  return DEPARTMENTS.find((d) => d.key === key);
+// Persian week days (Saturday=0 ... Friday=6)
+export const PERSIAN_WEEK_DAYS = [
+  { key: 0, label: "شنبه" },
+  { key: 1, label: "یکشنبه" },
+  { key: 2, label: "دوشنبه" },
+  { key: 3, label: "سه‌شنبه" },
+  { key: 4, label: "چهارشنبه" },
+  { key: 5, label: "پنجشنبه" },
+  { key: 6, label: "جمعه" },
+] as const;
+
+export function roleByKey(key: string) {
+  return ROLES.find((r) => r.key === key);
 }
 export function priorityByKey(key: string) {
   return PRIORITIES.find((p) => p.key === key);
@@ -100,6 +74,9 @@ export function priorityByKey(key: string) {
 export function statusByKey(key: string) {
   return STATUSES.find((s) => s.key === key);
 }
-export function reasonByKey(key: string) {
-  return FOLLOW_UP_REASONS.find((r) => r.key === key);
+export function sourceByKey(key: string) {
+  return TASK_SOURCES.find((s) => s.key === key);
+}
+export function approvalStatusByKey(key: string) {
+  return APPROVAL_STATUSES.find((a) => a.key === key);
 }

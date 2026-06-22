@@ -13,80 +13,103 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { LoginScreen } from "./login-screen";
+import { ThemeToggle } from "./theme-toggle";
 import { NewTaskDialog } from "./new-task-dialog";
 import { OverviewView } from "./overview-view";
 import { KanbanView } from "./kanban-view";
 import { TaskListView } from "./task-list-view";
-import { CalendarView } from "./calendar-view";
-import { BIView } from "./bi-view";
-import { ReportsView } from "./reports-view";
+import { SchedulerView } from "./scheduler-view";
+import { ReferredView } from "./referred-view";
 import { MyTasksView } from "./my-tasks-view";
 import { MembersView } from "./members-view";
-import { AdminPanelView } from "./admin-panel";
-import { LoginScreen } from "./login-screen";
-import { ThemeToggle } from "./theme-toggle";
-import { usePMOStore, type ViewKey } from "@/lib/pmo-store";
+import { GroupsView } from "./groups-view";
+import { AdminView } from "./admin-view";
+import { useTMStore, type ViewKey } from "@/lib/pmo-store";
+import { ROLES, roleByKey } from "@/lib/constants";
 import type { SerializedTask } from "@/lib/serialize";
 import { toPersianDigits, isOverdue, formatJalaliLong } from "@/lib/jalali";
-import { departmentByKey } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   LayoutDashboard,
   KanbanSquare,
   ListChecks,
-  BarChart3,
-  FileBarChart,
+  CalendarClock,
+  FileText,
   CheckSquare,
   Users,
+  Building2,
   Settings,
   Plus,
   Menu,
   X,
-  Sun,
-  Clock,
   LogOut,
   ChevronDown,
   Crown,
-  CalendarDays,
 } from "lucide-react";
+
+/* ------------------------------------------------------------------ */
+/*  Navigation definition                                              */
+/* ------------------------------------------------------------------ */
 
 type NavItem = {
   key: ViewKey;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   desc: string;
-  managerOnly?: boolean;
+  roles?: string[];
 };
 
 const ALL_NAV: NavItem[] = [
   { key: "overview", label: "داشبورد", icon: LayoutDashboard, desc: "نمای کلی و شاخص‌ها" },
-  { key: "kanban", label: "کانبان", icon: KanbanSquare, desc: "نمودار کانبان با درگ‌اند‌دراپ" },
+  { key: "kanban", label: "کانبان", icon: KanbanSquare, desc: "نمودار کانبان تسک‌ها" },
   { key: "list", label: "لیست تسک‌ها", icon: ListChecks, desc: "جدول با فیلترهای پیشرفته" },
-  { key: "calendar", label: "تقویم", icon: CalendarDays, desc: "تقویم شمسی تسک‌ها" },
-  { key: "bi", label: "هوش تجاری", icon: BarChart3, desc: "نمودارها و هیت‌مپ", managerOnly: true },
-  { key: "reports", label: "گزارش‌ها", icon: FileBarChart, desc: "صبحگاهی و پایان روز", managerOnly: true },
+  { key: "scheduler", label: "زمان‌بندی", icon: CalendarClock, desc: "زمان‌بندی و قالب‌های تسک", roles: ["MANAGER", "SUPERVISOR"] },
+  { key: "referred", label: "ارجاع نامه‌ای", icon: FileText, desc: "تسک‌های ارجاعی" },
   { key: "mytasks", label: "کارهای من", icon: CheckSquare, desc: "تسک‌های شخصی من" },
-  { key: "members", label: "اعضا", icon: Users, desc: "تیم به تفکیک بخش", managerOnly: true },
-  { key: "admin", label: "پنل مدیریت", icon: Settings, desc: "مدیریت کاربران و دسترسی‌ها", managerOnly: true },
+  { key: "members", label: "اعضا", icon: Users, desc: "مدیریت اعضا", roles: ["MANAGER"] },
+  { key: "groups", label: "مجموعه‌ها", icon: Building2, desc: "مدیریت مجموعه‌های سازمانی", roles: ["SUPER_ADMIN"] },
+  { key: "admin", label: "مدیریت سیستم", icon: Settings, desc: "تنظیمات و مدیریت سیستم", roles: ["SUPER_ADMIN"] },
 ];
 
+/* ------------------------------------------------------------------ */
+/*  Role badge helpers                                                 */
+/* ------------------------------------------------------------------ */
+
+const ROLE_BADGE_CLASS: Record<string, string> = {
+  SUPER_ADMIN:
+    "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
+  MANAGER:
+    "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
+  SUPERVISOR:
+    "bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300",
+  SPECIALIST:
+    "bg-slate-100 text-slate-700 dark:bg-slate-800/50 dark:text-slate-300",
+};
+
+const ROLE_LABEL: Record<string, string> = {
+  SUPER_ADMIN: "مدیر کل",
+  MANAGER: "مدیر مجموعه",
+  SUPERVISOR: "سرپرست",
+  SPECIALIST: "کارشناس",
+};
+
+/* ------------------------------------------------------------------ */
+/*  DashboardShell                                                     */
+/* ------------------------------------------------------------------ */
+
 export function DashboardShell() {
-  const member = usePMOStore((s) => s.member);
-  const authLoading = usePMOStore((s) => s.authLoading);
-  const setMember = usePMOStore((s) => s.setMember);
-  const setAuthLoading = usePMOStore((s) => s.setAuthLoading);
-  const view = usePMOStore((s) => s.view);
-  const setView = usePMOStore((s) => s.setView);
-  const isManager = member?.role === "MANAGER";
+  const member = useTMStore((s) => s.member);
+  const authLoading = useTMStore((s) => s.authLoading);
+  const setMember = useTMStore((s) => s.setMember);
+  const setAuthLoading = useTMStore((s) => s.setAuthLoading);
+  const view = useTMStore((s) => s.view);
+  const setView = useTMStore((s) => s.setView);
 
   const [newTaskOpen, setNewTaskOpen] = React.useState(false);
+  const [newTaskKey, setNewTaskKey] = React.useState(0);
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
-  const [filters, setFilters] = React.useState({
-    department: null as string | null,
-    priority: null as string | null,
-    overdueOnly: false,
-  });
 
   // Check session on mount
   React.useEffect(() => {
@@ -98,8 +121,11 @@ export function DashboardShell() {
           const data = await r.json();
           if (!cancelled && data.member) {
             setMember(data.member);
-            // Members default to "mytasks"; managers default to "overview"
-            setView(data.member.role === "MANAGER" ? "overview" : "mytasks");
+            const role = data.member.role;
+            if (role === "SUPER_ADMIN") setView("admin");
+            else if (role === "MANAGER" || role === "SUPERVISOR") setView("overview");
+            else if (role === "SPECIALIST") setView("mytasks");
+            else setView("overview");
           } else if (!cancelled) {
             setMember(null);
           }
@@ -117,7 +143,7 @@ export function DashboardShell() {
     };
   }, []);
 
-  // Fetch tasks (role-scoped server-side)
+  // Fetch tasks
   const { data } = useQuery({
     queryKey: ["tasks", "all", member?.id],
     queryFn: async () => {
@@ -128,7 +154,9 @@ export function DashboardShell() {
     enabled: !!member,
   });
   const tasks = data?.tasks ?? [];
-  const overdueCount = tasks.filter((t) => isOverdue(new Date(t.deadline), t.status)).length;
+  const overdueCount = tasks.filter((t) =>
+    isOverdue(new Date(t.deadline), t.status)
+  ).length;
 
   const queryClient = useQueryClient();
   function refreshAll() {
@@ -136,7 +164,6 @@ export function DashboardShell() {
     queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
     queryClient.invalidateQueries({ queryKey: ["members"] });
     queryClient.invalidateQueries({ queryKey: ["admin"] });
-    queryClient.invalidateQueries({ queryKey: ["report"] });
   }
 
   async function logout() {
@@ -147,7 +174,7 @@ export function DashboardShell() {
     toast.success("از حساب خارج شدید.");
   }
 
-  // ---- Auth gate ----
+  /* ---- Auth gate ---- */
   if (authLoading) {
     return (
       <div className="h-screen flex items-center justify-center bg-muted/20">
@@ -163,34 +190,49 @@ export function DashboardShell() {
     return <LoginScreen />;
   }
 
-  const nav = ALL_NAV.filter((n) => !n.managerOnly || isManager);
+  /* ---- Filtered nav ---- */
+  const role = member.role;
+  const nav = ALL_NAV.filter(
+    (n) => !n.roles || n.roles.includes(role)
+  );
   const currentNav = nav.find((n) => n.key === view) ?? nav[0];
-  const dept = departmentByKey(member.department);
+  const canCreateTask = role !== "SPECIALIST";
+
+  /* ---- Role badge ---- */
+  const roleInfo = roleByKey(role);
+  const roleLabel = ROLE_LABEL[role] ?? roleInfo?.label ?? role;
+  const roleBadgeClass = ROLE_BADGE_CLASS[role] ?? "bg-muted text-muted-foreground";
 
   return (
     <div className="h-screen flex flex-col bg-muted/20">
-      {/* Top bar */}
+      {/* ======== Top bar ======== */}
       <header className="h-14 shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-30">
         <div className="h-full flex items-center gap-3 px-3 sm:px-4">
+          {/* Mobile toggle */}
           <button
             className="lg:hidden text-muted-foreground hover:text-foreground"
             onClick={() => setMobileNavOpen((v) => !v)}
           >
-            {mobileNavOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            {mobileNavOpen ? (
+              <X className="h-5 w-5" />
+            ) : (
+              <Menu className="h-5 w-5" />
+            )}
           </button>
 
+          {/* Logo */}
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
               پ
             </div>
             <div className="hidden sm:block">
-              <div className="text-sm font-bold leading-tight">PMO Agent</div>
-              <div className="text-[10px] text-muted-foreground leading-tight">
-                واحد برنامه‌ریزی سازمان
+              <div className="text-sm font-bold leading-tight">
+                مدیریت تسک
               </div>
             </div>
           </div>
 
+          {/* Online & overdue badges */}
           <div className="hidden md:flex items-center gap-1.5 mr-2">
             <Badge variant="outline" className="gap-1 text-xs font-normal">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -203,20 +245,22 @@ export function DashboardShell() {
             )}
           </div>
 
+          {/* Right section */}
           <div className="mr-auto flex items-center gap-2">
-            {isManager && (
+            {canCreateTask && (
               <Button
                 size="sm"
-                onClick={() => setNewTaskOpen(true)}
+                onClick={() => { setNewTaskKey((k) => k + 1); setNewTaskOpen(true); }}
                 className="gap-1.5"
               >
                 <Plus className="h-4 w-4" />
                 <span className="hidden sm:inline">تسک جدید</span>
               </Button>
             )}
+
             <ThemeToggle />
 
-            {/* User menu */}
+            {/* User dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="gap-1.5 px-2 h-9">
@@ -224,9 +268,7 @@ export function DashboardShell() {
                     <AvatarFallback
                       className={cn(
                         "text-xs font-bold",
-                        isManager
-                          ? "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
-                          : "bg-primary/10 text-primary"
+                        roleBadgeClass
                       )}
                     >
                       {member.name.charAt(0)}
@@ -244,9 +286,8 @@ export function DashboardShell() {
                     <Avatar className="h-9 w-9">
                       <AvatarFallback
                         className={cn(
-                          isManager
-                            ? "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
-                            : "bg-primary/10 text-primary"
+                          "text-xs font-bold",
+                          roleBadgeClass
                         )}
                       >
                         {member.name.charAt(0)}
@@ -255,33 +296,59 @@ export function DashboardShell() {
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate flex items-center gap-1">
                         {member.name}
-                        {isManager && <Crown className="h-3 w-3 text-amber-500" />}
+                        {role === "MANAGER" && (
+                          <Crown className="h-3 w-3 text-amber-500" />
+                        )}
                       </div>
-                      <div className="text-xs text-muted-foreground" dir="ltr">
+                      <div
+                        className="text-xs text-muted-foreground"
+                        dir="ltr"
+                      >
                         {member.handle}
                       </div>
                     </div>
                   </div>
-                  {dept && (
-                    <div className="mt-2 pt-2 border-t text-xs text-muted-foreground flex items-center justify-between">
-                      <span>بخش:</span>
-                      <span className="font-medium text-foreground">{dept.label}</span>
-                    </div>
-                  )}
-                  <div className="mt-1 text-xs text-muted-foreground flex items-center justify-between">
-                    <span>نقش:</span>
-                    <span className="font-medium text-foreground">
-                      {isManager ? "مدیر واحد" : "عضو تیم"}
+
+                  {/* Role badge */}
+                  <div className="mt-2 pt-2 border-t flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">
+                      نقش:
+                    </span>
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1 text-xs font-medium rounded-md px-2 py-0.5",
+                        roleBadgeClass
+                      )}
+                    >
+                      {role === "MANAGER" && (
+                        <Crown className="h-3 w-3" />
+                      )}
+                      {roleLabel}
                     </span>
                   </div>
+
+                  {/* Group name if available */}
+                  {member.groupName && (
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">
+                        مجموعه:
+                      </span>
+                      <span className="text-xs font-medium text-foreground">
+                        {member.groupName}
+                      </span>
+                    </div>
+                  )}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {!isManager && (
+                {role === "SPECIALIST" && (
                   <div className="px-2 py-1.5 text-[11px] text-muted-foreground bg-muted/40">
                     شما فقط تسک‌های خودتان را می‌بینید.
                   </div>
                 )}
-                <DropdownMenuItem onClick={logout} className="text-rose-600 focus:text-rose-700">
+                <DropdownMenuItem
+                  onClick={logout}
+                  className="text-rose-600 focus:text-rose-700"
+                >
                   <LogOut className="h-4 w-4" />
                   خروج از حساب
                 </DropdownMenuItem>
@@ -291,6 +358,7 @@ export function DashboardShell() {
         </div>
       </header>
 
+      {/* ======== Body (sidebar + main) ======== */}
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
         <aside
@@ -298,10 +366,12 @@ export function DashboardShell() {
             "w-60 shrink-0 border-l bg-background flex-col z-20",
             "fixed lg:static inset-y-0 right-0 top-14 lg:top-0",
             "transition-transform lg:translate-x-0",
-            mobileNavOpen ? "flex translate-x-0" : "flex translate-x-full lg:translate-x-0"
+            mobileNavOpen
+              ? "flex translate-x-0"
+              : "flex translate-x-full lg:translate-x-0"
           )}
         >
-          <nav className="flex-1 p-3 space-y-1 overflow-y-auto scroll-area-pmo">
+          <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
             {nav.map((item) => {
               const Icon = item.icon;
               const active = view === item.key;
@@ -309,8 +379,8 @@ export function DashboardShell() {
                 item.key === "list" || item.key === "kanban"
                   ? tasks.length
                   : item.key === "mytasks"
-                  ? tasks.filter((t) => t.status !== "DONE").length
-                  : null;
+                    ? tasks.filter((t) => t.status !== "DONE").length
+                    : null;
               return (
                 <button
                   key={item.key}
@@ -327,19 +397,23 @@ export function DashboardShell() {
                 >
                   <Icon className="h-4 w-4 shrink-0" />
                   <span className="flex-1 font-medium">{item.label}</span>
-                  {item.managerOnly && (
+                  {item.roles && (
                     <Crown
                       className={cn(
                         "h-3 w-3",
-                        active ? "text-primary-foreground/70" : "text-amber-500"
+                        active
+                          ? "text-primary-foreground/70"
+                          : "text-amber-500"
                       )}
                     />
                   )}
                   {count !== null && count > 0 && (
                     <span
                       className={cn(
-                        "text-xs nums-fa rounded-md px-1.5 py-0.5",
-                        active ? "bg-primary-foreground/20" : "bg-muted"
+                        "text-xs rounded-md px-1.5 py-0.5",
+                        active
+                          ? "bg-primary-foreground/20"
+                          : "bg-muted"
                       )}
                     >
                       {toPersianDigits(count)}
@@ -350,30 +424,10 @@ export function DashboardShell() {
             })}
           </nav>
 
-          {/* Cron info footer */}
-          <div className="p-3 border-t space-y-2">
-            <div className="rounded-lg bg-muted/60 p-2.5 text-[11px] space-y-1.5">
-              <div className="font-semibold text-foreground flex items-center gap-1.5">
-                <Clock className="h-3 w-3" />
-                زمان‌سنجی خودکار
-              </div>
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Sun className="h-3 w-3 text-amber-500" />
-                  صبحگاهی
-                </span>
-                <span className="nums-fa">۰۸:۰۰</span>
-              </div>
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <FileBarChart className="h-3 w-3 text-primary" />
-                  گزارش مدیر
-                </span>
-                <span className="nums-fa">۱۹:۰۰</span>
-              </div>
-              <p className="text-[10px] text-muted-foreground pt-1 border-t">
-                منطقه زمانی: Asia/Tehran
-              </p>
+          {/* Sidebar footer with date */}
+          <div className="p-3 border-t">
+            <div className="rounded-lg bg-muted/60 p-2.5 text-[11px] text-center text-muted-foreground">
+              {formatJalaliLong(new Date())}
             </div>
           </div>
         </aside>
@@ -386,49 +440,49 @@ export function DashboardShell() {
           />
         )}
 
-        {/* Main content */}
+        {/* ======== Main content ======== */}
         <main className="flex-1 flex flex-col overflow-hidden">
+          {/* Sub-header */}
           <div className="h-12 shrink-0 border-b bg-background px-4 flex items-center justify-between">
             <div>
               <h1 className="text-sm font-semibold flex items-center gap-2">
                 {currentNav?.label}
-                {currentNav?.managerOnly && (
+                {currentNav?.roles && (
                   <Crown className="h-3.5 w-3.5 text-amber-500" />
                 )}
               </h1>
               <p className="text-[11px] text-muted-foreground hidden sm:block">
                 {currentNav?.desc}
-                {!isManager && (currentNav?.key === "kanban" || currentNav?.key === "list") && (
-                  <span className="text-amber-600 dark:text-amber-400"> — فقط تسک‌های شما</span>
-                )}
               </p>
             </div>
-            <div className="text-[11px] text-muted-foreground nums-fa hidden sm:block">
+            <div className="text-[11px] text-muted-foreground hidden sm:block">
               {formatJalaliLong(new Date())}
             </div>
           </div>
+
+          {/* View area */}
           <div className="flex-1 overflow-hidden p-3 sm:p-4">
-            {view === "overview" && (
-              <OverviewView onNewTask={() => setNewTaskOpen(true)} tasks={tasks} />
+            {view === "overview" && <OverviewView />}
+            {view === "kanban" && <KanbanView />}
+            {view === "list" && <TaskListView />}
+            {view === "scheduler" && (
+              (role === "MANAGER" || role === "SUPERVISOR") && (
+                <SchedulerView />
+              )
             )}
-            {view === "kanban" && (
-              <KanbanView filters={filters} onNewTask={() => setNewTaskOpen(true)} />
-            )}
-            {view === "list" && (
-              <TaskListView filters={filters} setFilters={setFilters} />
-            )}
-            {view === "calendar" && <CalendarView />}
-            {view === "bi" && isManager && <BIView />}
-            {view === "reports" && isManager && <ReportsView />}
+            {view === "referred" && <ReferredView />}
             {view === "mytasks" && <MyTasksView />}
-            {view === "members" && isManager && <MembersView />}
-            {view === "admin" && isManager && <AdminPanelView />}
+            {view === "members" && role === "MANAGER" && <MembersView />}
+            {view === "groups" && role === "SUPER_ADMIN" && <GroupsView />}
+            {view === "admin" && role === "SUPER_ADMIN" && <AdminView />}
           </div>
         </main>
       </div>
 
-      {isManager && (
+      {/* New task dialog for non-SPECIALIST */}
+      {canCreateTask && (
         <NewTaskDialog
+          key={newTaskKey}
           open={newTaskOpen}
           onOpenChange={setNewTaskOpen}
           onCreated={refreshAll}

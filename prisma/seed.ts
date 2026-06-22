@@ -1,326 +1,172 @@
 import { db } from "../src/lib/db";
 
-// Seed demo data for the PMO Organizational Planning unit.
-// Run with: bun run prisma/seed.ts
-
-const DEPARTMENTS = ["FANTASY", "NON_FANTASY", "BI", "COMMISSION"] as const;
-
 async function main() {
-  console.log("🌱 Seeding PMO database...");
+  console.log("Seeding TaskManager database...");
 
-  // Wipe
   await db.followUpLog.deleteMany();
   await db.task.deleteMany();
+  await db.taskSchedule.deleteMany();
+  await db.taskTemplate.deleteMany();
   await db.member.deleteMany();
-  await db.subDepartment.deleteMany();
-  await db.dailyReport.deleteMany();
+  await db.orgGroup.deleteMany();
 
-  // ---- Sub-departments (sub-units within each department) ----
-  const subDepts = await db.subDepartment.createMany({
+  // ---- Groups ----
+  const grp1 = await db.orgGroup.create({ data: { name: "تأمین فانتزی", code: "GRP-001" } });
+  const grp2 = await db.orgGroup.create({ data: { name: "تأمین غیرفانتزی", code: "GRP-002" } });
+  const grp3 = await db.orgGroup.create({ data: { name: "هوش تجاری", code: "GRP-003" } });
+  const grp4 = await db.orgGroup.create({ data: { name: "پورسانت و گزارش‌ها", code: "GRP-004" } });
+
+  // ---- Super Admin ----
+  await db.member.create({
+    data: { name: "مدیر کل سیستم", handle: "@admin", password: "admin", role: "SUPER_ADMIN" },
+  });
+
+  // ---- Managers ----
+  const mgr1 = await db.member.create({
+    data: { name: "مهندس رضایی", handle: "@mgr1", password: "admin", role: "MANAGER", group: { connect: { id: grp1.id } } },
+  });
+  await db.orgGroup.update({ where: { id: grp1.id }, data: { managerId: mgr1.id } });
+
+  const mgr2 = await db.member.create({
+    data: { name: "مهندس احمدی", handle: "@mgr2", password: "admin", role: "MANAGER", group: { connect: { id: grp2.id } } },
+  });
+  await db.orgGroup.update({ where: { id: grp2.id }, data: { managerId: mgr2.id } });
+
+  const mgr3 = await db.member.create({
+    data: { name: "مهندس نوری", handle: "@mgr3", password: "admin", role: "MANAGER", group: { connect: { id: grp3.id } } },
+  });
+  await db.orgGroup.update({ where: { id: grp3.id }, data: { managerId: mgr3.id } });
+
+  const mgr4 = await db.member.create({
+    data: { name: "مهندس موسوی", handle: "@mgr4", password: "admin", role: "MANAGER", group: { connect: { id: grp4.id } } },
+  });
+  await db.orgGroup.update({ where: { id: grp4.id }, data: { managerId: mgr4.id } });
+
+  // ---- Supervisors ----
+  const sup1 = await db.member.create({
+    data: { name: "سرپرست علی‌پور", handle: "@sup1", password: "1234", role: "SUPERVISOR", group: { connect: { id: grp1.id } }, supervisor: { connect: { id: mgr1.id } } },
+  });
+  const sup2 = await db.member.create({
+    data: { name: "سرپرست کریمی", handle: "@sup2", password: "1234", role: "SUPERVISOR", group: { connect: { id: grp2.id } }, supervisor: { connect: { id: mgr2.id } } },
+  });
+
+  // ---- Specialists ----
+  const sp1 = await db.member.create({
+    data: { name: "علی محمدی", handle: "@ali", password: "1234", role: "SPECIALIST", group: { connect: { id: grp1.id } }, supervisor: { connect: { id: sup1.id } } },
+  });
+  const sp2 = await db.member.create({
+    data: { name: "سارا رحیمی", handle: "@sara", password: "1234", role: "SPECIALIST", group: { connect: { id: grp1.id } }, supervisor: { connect: { id: sup1.id } } },
+  });
+  const sp3 = await db.member.create({
+    data: { name: "حسین حسینی", handle: "@hossein", password: "1234", role: "SPECIALIST", group: { connect: { id: grp2.id } }, supervisor: { connect: { id: sup2.id } } },
+  });
+  const sp4 = await db.member.create({
+    data: { name: "مریم نوری", handle: "@maryam", password: "1234", role: "SPECIALIST", group: { connect: { id: grp2.id } }, supervisor: { connect: { id: sup2.id } } },
+  });
+  const sp5 = await db.member.create({
+    data: { name: "رضا قاسمی", handle: "@reza", password: "1234", role: "SPECIALIST", group: { connect: { id: grp3.id } }, supervisor: { connect: { id: mgr3.id } } },
+  });
+  const sp6 = await db.member.create({
+    data: { name: "فاطمه موسوی", handle: "@fateme", password: "1234", role: "SPECIALIST", group: { connect: { id: grp3.id } }, supervisor: { connect: { id: mgr3.id } } },
+  });
+  const sp7 = await db.member.create({
+    data: { name: "امیر تهرانی", handle: "@amir", password: "1234", role: "SPECIALIST", group: { connect: { id: grp4.id } }, supervisor: { connect: { id: mgr4.id } } },
+  });
+  const sp8 = await db.member.create({
+    data: { name: "زهرا شریفی", handle: "@zahra", password: "1234", role: "SPECIALIST", group: { connect: { id: grp4.id } }, supervisor: { connect: { id: mgr4.id } } },
+  });
+
+  // ---- Task Templates ----
+  const tpl1 = await db.taskTemplate.create({ data: { name: "بررسی سفارشات ورودی", group: { connect: { id: grp1.id } }, priority: "HIGH" } });
+  const tpl2 = await db.taskTemplate.create({ data: { name: "تماس با تأمین‌کنندگان", group: { connect: { id: grp1.id } }, priority: "MEDIUM" } });
+  const tpl3 = await db.taskTemplate.create({ data: { name: "بررسی موجودی انبار", group: { connect: { id: grp2.id } }, priority: "HIGH" } });
+  const tpl4 = await db.taskTemplate.create({ data: { name: "تحلیل گزارش فروش", group: { connect: { id: grp3.id } }, priority: "HIGH" } });
+  const tpl5 = await db.taskTemplate.create({ data: { name: "محاسبه پورسانت", group: { connect: { id: grp4.id } }, priority: "MEDIUM" } });
+
+  // ---- Schedules ----
+  await db.taskSchedule.createMany({
     data: [
-      // Fantasy sub-units
-      { name: "تأمین کالای داخلی", department: "FANTASY" },
-      { name: "تأمین کالای وارداتی", department: "FANTASY" },
-      // Non-fantasy sub-units
-      { name: "انبار مرکزی", department: "NON_FANTASY" },
-      { name: "حمل‌ونقل", department: "NON_FANTASY" },
-      // BI sub-units
-      { name: "تحلیل فروش", department: "BI" },
-      { name: "گزارش‌های مدیریتی", department: "BI" },
-      // Commission sub-units
-      { name: "پورسانت نمایندگان", department: "COMMISSION" },
-      { name: "تسویه شعب", department: "COMMISSION" },
+      { taskTemplateId: tpl1.id, dayOfWeek: 0, startTime: "08:00", endTime: "10:00", assigneeId: sp1.id },
+      { taskTemplateId: tpl1.id, dayOfWeek: 2, startTime: "08:00", endTime: "10:00", assigneeId: sp1.id },
+      { taskTemplateId: tpl1.id, dayOfWeek: 4, startTime: "08:00", endTime: "10:00", assigneeId: sp2.id },
+      { taskTemplateId: tpl2.id, dayOfWeek: 1, startTime: "10:00", endTime: "12:00", assigneeId: sp1.id },
+      { taskTemplateId: tpl2.id, dayOfWeek: 3, startTime: "10:00", endTime: "12:00", assigneeId: sp2.id },
+      { taskTemplateId: tpl3.id, dayOfWeek: 0, startTime: "09:00", endTime: "11:00", assigneeId: sp3.id },
+      { taskTemplateId: tpl3.id, dayOfWeek: 2, startTime: "09:00", endTime: "11:00", assigneeId: sp4.id },
+      { taskTemplateId: tpl3.id, dayOfWeek: 4, startTime: "09:00", endTime: "11:00", assigneeId: sp3.id },
+      { taskTemplateId: tpl4.id, dayOfWeek: 1, startTime: "08:00", endTime: "11:00", assigneeId: sp5.id },
+      { taskTemplateId: tpl4.id, dayOfWeek: 3, startTime: "08:00", endTime: "11:00", assigneeId: sp6.id },
+      { taskTemplateId: tpl5.id, dayOfWeek: 5, startTime: "08:00", endTime: "12:00", assigneeId: sp7.id },
     ],
   });
-  const allSubDepts = await db.subDepartment.findMany();
-  const subId = (dept: string, name: string) =>
-    allSubDepts.find((s) => s.department === dept && s.name === name)?.id ?? null;
 
-  // ---- Members ----
-  const manager = await db.member.create({
-    data: {
-      name: "مهندس رضایی",
-      handle: "@manager",
-      password: "admin",
-      department: "BI",
-      role: "MANAGER",
-    },
-  });
-
-  const members = await db.member.createMany({
-    data: [
-      // Fantasy supply
-      { name: "علی محمدی", handle: "@ali", password: "1234", department: "FANTASY", role: "MEMBER", subDepartmentId: subId("FANTASY", "تأمین کالای داخلی") },
-      { name: "سارا کریمی", handle: "@sara", password: "1234", department: "FANTASY", role: "MEMBER", subDepartmentId: subId("FANTASY", "تأمین کالای وارداتی") },
-      // Non-fantasy supply
-      { name: "حسین احمدی", handle: "@hossein", password: "1234", department: "NON_FANTASY", role: "MEMBER", subDepartmentId: subId("NON_FANTASY", "انبار مرکزی") },
-      { name: "مریم نوری", handle: "@maryam", password: "1234", department: "NON_FANTASY", role: "MEMBER", subDepartmentId: subId("NON_FANTASY", "حمل‌ونقل") },
-      // BI
-      { name: "رضا قاسمی", handle: "@reza", password: "1234", department: "BI", role: "MEMBER", subDepartmentId: subId("BI", "تحلیل فروش") },
-      { name: "فاطمه موسوی", handle: "@fateme", password: "1234", department: "BI", role: "MEMBER", subDepartmentId: subId("BI", "گزارش‌های مدیریتی") },
-      // Commission
-      { name: "امیر تهرانی", handle: "@amir", password: "1234", department: "COMMISSION", role: "MEMBER", subDepartmentId: subId("COMMISSION", "پورسانت نمایندگان") },
-      { name: "زهرا شریفی", handle: "@zahra", password: "1234", department: "COMMISSION", role: "MEMBER", subDepartmentId: subId("COMMISSION", "تسویه شعب") },
-    ],
-  });
-
-  const allMembers = await db.member.findMany({ where: { role: "MEMBER" } });
-
-  // ---- Tasks ----
+  // ---- Sample Tasks ----
   const now = new Date();
-  const day = 86400000;
-  const hour = 3600000;
+  const dayMs = 86400000;
+  const hourMs = 3600000;
+  let counter = 1;
 
-  const tasks = [
-    // Fantasy
-    {
-      title: "تأمین کالکشن فانتزی پاییز ۱۴۰۳",
-      description: "هماهنگی با تأمین‌کنندگان برای کالکشن جدید فانتزی",
-      department: "FANTASY",
-      assigneeHandle: "@ali",
-      priority: "HIGH",
-      status: "STARTED",
-      deadlineOffsetDays: 0,
-      deadlineHour: 18,
-      link: "https://example.com/fantasy-q3",
-    },
-    {
-      title: "بررسی کیفیت محصولات فانتزی ورودی",
-      department: "FANTASY",
-      assigneeHandle: "@sara",
-      priority: "MEDIUM",
-      status: "PENDING",
-      deadlineOffsetDays: 2,
-      deadlineHour: 16,
-    },
-    {
-      title: "به‌روزرسانی لیست قیمت‌های فانتزی",
-      department: "FANTASY",
-      assigneeHandle: "@ali",
-      priority: "LOW",
-      status: "DONE",
-      deadlineOffsetDays: -3,
-      deadlineHour: 14,
-      doneOffsetDays: -4,
-    },
-    // Non-fantasy
-    {
-      title: "سفارش انبار غیرفانتزی هفتگی",
-      department: "NON_FANTASY",
-      assigneeHandle: "@hossein",
-      priority: "HIGH",
-      status: "BLOCKED",
-      deadlineOffsetDays: -1,
-      deadlineHour: 12,
-      followUpReason: "DEPENDENT_ON_OTHERS",
-    },
-    {
-      title: "هماهنگی حمل‌ونقل بار غیرفانتزی",
-      department: "NON_FANTASY",
-      assigneeHandle: "@maryam",
-      priority: "MEDIUM",
-      status: "STARTED",
-      deadlineOffsetDays: 1,
-      deadlineHour: 17,
-    },
-    {
-      title: "صورت‌حساب تأمین‌کنندگان غیرفانتزی",
-      department: "NON_FANTASY",
-      assigneeHandle: "@hossein",
-      priority: "LOW",
-      status: "DONE",
-      deadlineOffsetDays: -5,
-      deadlineHour: 15,
-      doneOffsetDays: -6,
-    },
-    {
-      title: "بازنگری قراردادهای غیرفانتزی",
-      department: "NON_FANTASY",
-      assigneeHandle: "@maryam",
-      priority: "HIGH",
-      status: "BLOCKED",
-      deadlineOffsetDays: 0,
-      deadlineHour: 18,
-      followUpReason: "LACK_OF_INFO",
-    },
-    // BI
-    {
-      title: "ساخت داشبورد فروش هفتگی",
-      department: "BI",
-      assigneeHandle: "@reza",
-      priority: "HIGH",
-      status: "STARTED",
-      deadlineOffsetDays: 0,
-      deadlineHour: 19,
-      link: "https://example.com/bi-weekly",
-    },
-    {
-      title: "تحلیل ریزش مشتریان فانتزی",
-      department: "BI",
-      assigneeHandle: "@fateme",
-      priority: "MEDIUM",
-      status: "PENDING",
-      deadlineOffsetDays: 3,
-      deadlineHour: 16,
-    },
-    {
-      title: "گزارش پورسانت ماهانه اردیبهشت",
-      department: "BI",
-      assigneeHandle: "@reza",
-      priority: "MEDIUM",
-      status: "BLOCKED",
-      deadlineOffsetDays: -2,
-      deadlineHour: 13,
-      followUpReason: "HIGH_WORKLOAD",
-    },
-    {
-      title: "مدل پیش‌بینی تقاضای فانتزی",
-      department: "BI",
-      assigneeHandle: "@fateme",
-      priority: "HIGH",
-      status: "DONE",
-      deadlineOffsetDays: -7,
-      deadlineHour: 18,
-      doneOffsetDays: -8,
-    },
-    // Commission
-    {
-      title: "محاسبه پورسانت نمایندگان تیر",
-      department: "COMMISSION",
-      assigneeHandle: "@amir",
-      priority: "HIGH",
-      status: "STARTED",
-      deadlineOffsetDays: 0,
-      deadlineHour: 20,
-    },
-    {
-      title: "تسویه حساب پورسانت شعب",
-      department: "COMMISSION",
-      assigneeHandle: "@zahra",
-      priority: "HIGH",
-      status: "BLOCKED",
-      deadlineOffsetDays: -1,
-      deadlineHour: 14,
-      followUpReason: "TECHNICAL_ISSUE",
-    },
-    {
-      title: "گزارش مقایسه‌ای پورسانت فصل",
-      department: "COMMISSION",
-      assigneeHandle: "@amir",
-      priority: "LOW",
-      status: "PENDING",
-      deadlineOffsetDays: 4,
-      deadlineHour: 17,
-    },
-    {
-      title: "بایگانی فاکتورهای پورسانت",
-      department: "COMMISSION",
-      assigneeHandle: "@zahra",
-      priority: "LOW",
-      status: "DONE",
-      deadlineOffsetDays: -6,
-      deadlineHour: 12,
-      doneOffsetDays: -7,
-    },
-    // More overdue tasks for richer BI demo
-    {
-      title: "تحلیل حاشیه سود فانتزی Q2",
-      department: "BI",
-      assigneeHandle: "@reza",
-      priority: "MEDIUM",
-      status: "BLOCKED",
-      deadlineOffsetDays: -4,
-      deadlineHour: 15,
-      followUpReason: "DEPENDENT_ON_OTHERS",
-    },
-    {
-      title: "گزارش عملکرد تأمین‌کنندگان فانتزی",
-      department: "FANTASY",
-      assigneeHandle: "@sara",
-      priority: "MEDIUM",
-      status: "BLOCKED",
-      deadlineOffsetDays: -3,
-      deadlineHour: 16,
-      followUpReason: "LACK_OF_INFO",
-    },
-    {
-      title: "بررسی تاخیرات ارسال غیرفانتزی",
-      department: "NON_FANTASY",
-      assigneeHandle: "@hossein",
-      priority: "LOW",
-      status: "PENDING",
-      deadlineOffsetDays: -2,
-      deadlineHour: 11,
-    },
+  type SampleTask = {
+    title: string; groupId: string; assigneeId: string; priority: string;
+    status: string; deadlineDays: number; deadlineHour: number; source: string;
+    followUpReason?: string; letterNumber?: string; letterDate?: string;
+    refererId?: string; approvalStatus?: string; approverId?: string;
+  };
+
+  const sampleTasks: SampleTask[] = [
+    { title: "تأمین کالکشن فانتزی پاییز", groupId: grp1.id, assigneeId: sp1.id, priority: "HIGH", status: "STARTED", deadlineDays: 0, deadlineHour: 18, source: "MANUAL" },
+    { title: "بررسی کیفیت محصولات ورودی", groupId: grp1.id, assigneeId: sp2.id, priority: "MEDIUM", status: "PENDING", deadlineDays: 2, deadlineHour: 16, source: "MANUAL" },
+    { title: "سفارش انبار هفتگی", groupId: grp2.id, assigneeId: sp3.id, priority: "HIGH", status: "BLOCKED", deadlineDays: -1, deadlineHour: 12, source: "MANUAL", followUpReason: "DEPENDENT_ON_OTHERS" },
+    { title: "هماهنگی حمل‌ونقل", groupId: grp2.id, assigneeId: sp4.id, priority: "MEDIUM", status: "STARTED", deadlineDays: 1, deadlineHour: 17, source: "MANUAL" },
+    { title: "داشبورد فروش هفتگی", groupId: grp3.id, assigneeId: sp5.id, priority: "HIGH", status: "STARTED", deadlineDays: 0, deadlineHour: 19, source: "MANUAL" },
+    { title: "تحلیل ریزش مشتریان", groupId: grp3.id, assigneeId: sp6.id, priority: "MEDIUM", status: "PENDING", deadlineDays: 3, deadlineHour: 16, source: "MANUAL" },
+    { title: "محاسبه پورسانت نمایندگان", groupId: grp4.id, assigneeId: sp7.id, priority: "HIGH", status: "STARTED", deadlineDays: 0, deadlineHour: 20, source: "MANUAL" },
+    { title: "تسویه حساب شعب", groupId: grp4.id, assigneeId: sp8.id, priority: "HIGH", status: "PENDING", deadlineDays: 1, deadlineHour: 14, source: "MANUAL" },
+    { title: "پیگیری نامه شماره ۱۲۳۴", groupId: grp1.id, assigneeId: sp1.id, priority: "HIGH", status: "PENDING", deadlineDays: 2, deadlineHour: 16, source: "REFERRED", letterNumber: "1234", letterDate: "1405/04/01", refererId: sp1.id, approvalStatus: "APPROVED", approverId: sup1.id },
+    { title: "ارجاع نامه معاونت بازرگانی", groupId: grp2.id, assigneeId: sp3.id, priority: "MEDIUM", status: "PENDING", deadlineDays: 5, deadlineHour: 12, source: "REFERRED", letterNumber: "5678", letterDate: "1405/04/02", refererId: sp3.id, approvalStatus: "PENDING_APPROVAL" },
   ];
 
-  let counter = 1;
-  for (const t of tasks) {
-    const assignee = allMembers.find((m) => m.handle === t.assigneeHandle)!;
-    const deadline = new Date(
-      now.getTime() + t.deadlineOffsetDays * day + (t.deadlineHour - now.getHours()) * hour
-    );
-    const created = new Date(now.getTime() - 5 * day - Math.random() * 3 * day);
-    const startedAt =
-      t.status === "STARTED" || t.status === "DONE"
-        ? new Date(created.getTime() + day)
-        : null;
-    const doneAt =
-      t.status === "DONE" && t.doneOffsetDays !== undefined
-        ? new Date(now.getTime() + t.doneOffsetDays * day)
-        : null;
-    // Planned start = 2 days before deadline, but never before the creation date.
-    const startTime = new Date(Math.max(deadline.getTime() - 2 * day, created.getTime()));
+  for (const t of sampleTasks) {
+    const deadline = new Date(now.getTime() + t.deadlineDays * dayMs + (t.deadlineHour - now.getHours()) * hourMs);
+    const created = new Date(now.getTime() - 5 * dayMs - Math.random() * 3 * dayMs);
+    const sStartedAt = (t.status === "STARTED" || t.status === "DONE") ? new Date(created.getTime() + dayMs) : null;
+    const sDoneAt = t.status === "DONE" ? new Date(now.getTime() - dayMs) : null;
+    const sStartTime = new Date(Math.max(deadline.getTime() - 2 * dayMs, created.getTime()));
 
-    await db.task.create({
-      data: {
-        code: `TSK-${String(counter).padStart(4, "0")}`,
-        title: t.title,
-        description: t.description ?? null,
-        department: t.department,
-        subDepartmentId: assignee.subDepartmentId,
-        assigneeId: assignee.id,
-        priority: t.priority,
-        status: t.status,
-        startTime,
-        deadline,
-        link: t.link ?? null,
-        followUpReason: t.followUpReason ?? null,
-        startedAt,
-        doneAt,
-        createdAt: created,
-        updatedAt: doneAt ?? startedAt ?? created,
-      },
-    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const d: any = {
+      code: `TSK-${String(counter).padStart(4, "0")}`,
+      title: t.title,
+      group: { connect: { id: t.groupId } },
+      assignee: { connect: { id: t.assigneeId } },
+      priority: t.priority,
+      status: t.status,
+      source: t.source,
+      startTime: sStartTime,
+      deadline,
+      createdAt: created,
+      updatedAt: sDoneAt ?? sStartedAt ?? created,
+    };
+    if (t.followUpReason) d.followUpReason = t.followUpReason;
+    if (sStartedAt) d.startedAt = sStartedAt;
+    if (sDoneAt) d.doneAt = sDoneAt;
+    if (t.letterNumber) d.letterNumber = t.letterNumber;
+    if (t.letterDate) d.letterDate = t.letterDate;
+    if (t.approvalStatus) d.approvalStatus = t.approvalStatus;
+    if (t.refererId) d.referer = { connect: { id: t.refererId } };
+    if (t.approverId) {
+      d.approver = { connect: { id: t.approverId } };
+      d.approvedAt = new Date(now.getTime() - 2 * dayMs);
+    }
+
+    await db.task.create({ data: d });
     counter++;
   }
 
-  // ---- A couple of follow-up logs ----
-  const sampleTask = await db.task.findFirst({ where: { status: "BLOCKED" } });
-  if (sampleTask) {
-    await db.followUpLog.create({
-      data: {
-        taskId: sampleTask.id,
-        type: "END_OF_DAY_REASON",
-        message: "کاربر علت را انتخاب کرد",
-        reason: sampleTask.followUpReason,
-      },
-    });
-    await db.followUpLog.create({
-      data: {
-        taskId: sampleTask.id,
-        type: "STATUS_CHANGE",
-        message: "وضعیت از «در حال انجام» به «مسدود شده» تغییر کرد",
-      },
-    });
-  }
-
-  console.log(`✅ Seeded ${allMembers.length} members and ${tasks.length} tasks.`);
-  console.log(`   Manager: ${manager.name} (${manager.handle})`);
+  console.log(`Seeded successfully:`);
+  console.log(`  1 Super Admin, 4 Managers, 2 Supervisors, 8 Specialists`);
+  console.log(`  4 Groups, 5 Task Templates, 11 Schedules, ${counter - 1} Tasks`);
   await db.$disconnect();
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+main().catch((e) => { console.error(e); process.exit(1); });
