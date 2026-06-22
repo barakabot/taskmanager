@@ -24,10 +24,6 @@ import {
   Clock,
 } from "lucide-react";
 
-/* ------------------------------------------------------------------ */
-/*  Role color map                                                      */
-/* ------------------------------------------------------------------ */
-
 const ROLE_COLORS: Record<string, { bg: string; text: string; bar: string; icon: React.ComponentType<{ className?: string }> }> = {
   SUPER_ADMIN: {
     bg: "bg-rose-100 dark:bg-rose-950/40",
@@ -62,10 +58,6 @@ const ROLE_LABELS: Record<string, string> = {
   SPECIALIST: "کارشناس",
 };
 
-/* ------------------------------------------------------------------ */
-/*  Stat Card                                                           */
-/* ------------------------------------------------------------------ */
-
 function StatCard({
   icon: Icon,
   label,
@@ -91,10 +83,6 @@ function StatCard({
     </Card>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/*  Main view                                                           */
-/* ------------------------------------------------------------------ */
 
 export function AdminView() {
   const member = useTMStore((s) => s.member);
@@ -143,7 +131,6 @@ export function AdminView() {
 
   const isLoading = gLoading || mLoading || tLoading;
 
-  // Role distribution
   const roleDistribution = React.useMemo(() => {
     const counts: Record<string, number> = {
       SUPER_ADMIN: 0,
@@ -160,7 +147,6 @@ export function AdminView() {
   const totalMembers = members.length;
   const maxRoleCount = Math.max(...Object.values(roleDistribution), 1);
 
-  // Recent 5 tasks
   const recentTasks = React.useMemo(() => {
     return [...tasks]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -169,7 +155,7 @@ export function AdminView() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6 p-1">
+      <div className="space-y-6 p-1 h-[calc(100vh-6rem)] overflow-y-auto">
         <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-24 w-full" />
@@ -182,8 +168,7 @@ export function AdminView() {
   }
 
   return (
-    <div className="space-y-6 p-1">
-      {/* Quick Actions */}
+    <div className="space-y-6 p-1 h-[calc(100vh-6rem)] overflow-y-auto scroll-smooth">
       <div className="flex items-center gap-2">
         <Button
           variant="outline"
@@ -205,7 +190,6 @@ export function AdminView() {
         </Button>
       </div>
 
-      {/* Stats Cards */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <StatCard icon={Building2} label="مجموعه‌ها" value={groups.length} color="bg-violet-500" />
         <StatCard icon={Users} label="کل اعضا" value={totalMembers} color="bg-emerald-500" />
@@ -213,7 +197,6 @@ export function AdminView() {
         <StatCard icon={CalendarClock} label="زمان‌بندی‌ها" value={scheduleCount} color="bg-amber-500" />
       </div>
 
-      {/* Role Distribution */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -255,7 +238,6 @@ export function AdminView() {
         </CardContent>
       </Card>
 
-      {/* Recent Activity */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -297,6 +279,8 @@ export function AdminView() {
           )}
         </CardContent>
       </Card>
+      
+      <div className="pb-4"></div>
     </div>
   );
 }

@@ -441,7 +441,8 @@ export function DashboardShell() {
         )}
 
         {/* ======== Main content ======== */}
-        <main className="flex-1 flex flex-col overflow-hidden">
+        {/* تغییر اصلی در این تگ انجام شد: overflow-hidden به overflow-y-auto تغییر یافت */}
+        <main className="flex-1 flex flex-col overflow-y-auto">
           {/* Sub-header */}
           <div className="h-12 shrink-0 border-b bg-background px-4 flex items-center justify-between">
             <div>
@@ -461,7 +462,8 @@ export function DashboardShell() {
           </div>
 
           {/* View area */}
-          <div className="flex-1 overflow-hidden p-3 sm:p-4">
+          {/* تغییر اصلی در این تگ انجام شد: overflow-hidden به overflow-y-auto تغییر یافت */}
+          <div className="flex-1 overflow-y-auto p-3 sm:p-4">
             {view === "overview" && <OverviewView />}
             {view === "kanban" && <KanbanView />}
             {view === "list" && <TaskListView />}

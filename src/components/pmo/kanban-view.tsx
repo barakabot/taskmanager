@@ -400,14 +400,16 @@ export function KanbanView() {
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 flex-1 min-h-0">
+        /* تغییر اصلی در این تگ انجام شد: ارتفاع ۱۰۰٪ داده شد تا ScrollArea به درستی کار کند */
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 flex-1 min-h-0 h-full">
           {KANBAN_ORDER.map((statusKey) => {
             const statusInfo = statusByKey(statusKey);
             const columnTasks = columns.get(statusKey) ?? [];
             return (
               <div
                 key={statusKey}
-                className="flex flex-col min-h-0 rounded-xl border bg-muted/30 overflow-hidden"
+                /* تغییر در این تگ: overflow-hidden حذف و ارتفاع فیکس تعریف شد */
+                className="flex flex-col h-full min-h-0 rounded-xl border bg-muted/30"
               >
                 {/* Column header */}
                 <div
@@ -434,7 +436,7 @@ export function KanbanView() {
                 </div>
 
                 {/* Cards */}
-                <ScrollArea className="flex-1">
+                <ScrollArea className="flex-1 h-full">
                   <div className="p-2 space-y-2">
                     {columnTasks.length === 0 && (
                       <p className="text-xs text-muted-foreground text-center py-6">
